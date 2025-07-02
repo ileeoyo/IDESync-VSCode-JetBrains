@@ -1,348 +1,140 @@
 package com.vscode.jetbrainssync
 
-import com.google.gson.Gson
-import com.intellij.notification.NotificationGroupManager
-import com.intellij.notification.NotificationType
+import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.editor.LogicalPosition
-import com.intellij.openapi.editor.ScrollType
-import com.intellij.openapi.fileEditor.FileEditorManager
-import com.intellij.openapi.fileEditor.FileEditorManagerEvent
-import com.intellij.openapi.fileEditor.FileEditorManagerListener
-import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.project.Project
-import com.intellij.openapi.vfs.LocalFileSystem
-import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.wm.WindowManager
-import org.java_websocket.client.WebSocketClient
-import org.java_websocket.handshake.ServerHandshake
-import java.io.File
-import java.net.URI
 
-data class EditorState(
-    val filePath: String,
-    val line: Int,
-    val column: Int,
-    val source: String? = "jetbrains",
-    val isActive: Boolean = false
-)
-
+/**
+ * VSCode与JetBrains同步服务（重构版）
+ *
+ * 采用模块化设计，主要组件：
+ * - WebSocket连接管理器：负责连接的建立、维护和重连
+ * - 编辑器状态管理器：管理状态缓存、防抖和去重
+ * - 文件操作处理器：处理文件的打开、关闭和导航
+ * - 事件监听管理器：统一管理各种事件监听器
+ * - 消息处理器：处理消息的序列化和反序列化
+ * - 操作队列处理器：确保操作的原子性和顺序性
+ */
 @Service(Service.Level.PROJECT)
-class VSCodeJetBrainsSyncService(private val project: Project) {
-    private var webSocket: WebSocketClient? = null
-    private var isActive = false
-    private var isHandlingExternalUpdate = false
-    private var isConnected = false
-    private var isReconnecting = false
-    private var autoReconnect = false
-    private val gson = Gson()
-    private var log: Logger = Logger.getInstance(VSCodeJetBrainsSyncService::class.java)
+class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
+    private val log: Logger = Logger.getInstance(VSCodeJetBrainsSyncService::class.java)
+
+    // 核心组件
+    private val editorStateManager = EditorStateManager(project)
+    private val fileOperationHandler = FileOperationHandler(project)
+    private val messageProcessor = MessageProcessor(fileOperationHandler)
+    private val webSocketManager = WebSocketConnectionManager(project, messageProcessor)
+    private val eventListenerManager = EventListenerManager(project, editorStateManager)
+    private val operationQueueProcessor = OperationQueueProcessor(messageProcessor, webSocketManager)
+
 
     init {
-        log.info("Initializing VSCodeJetBrainsSyncService")
+        log.info("初始化VSCode-JetBrains同步服务（重构版）")
+        // 设置状态栏
         setupStatusBar()
-        connectWebSocket()
-        setupEditorListeners()
-        setupWindowListeners()
+
+        // 设置组件间的回调关系
+        setupComponentCallbacks()
+        // 初始化事件监听器
+        eventListenerManager.setupEditorListeners()
+        eventListenerManager.setupWindowListeners()
+
+        log.info("同步服务初始化完成")
     }
 
+
+    /**
+     * 设置状态栏组件
+     */
     private fun setupStatusBar() {
         ApplicationManager.getApplication().invokeLater {
             SyncStatusBarWidgetFactory().createWidget(project)
+            log.info("状态栏组件设置完成")
         }
     }
 
+    /**
+     * 设置组件间的回调关系
+     */
+    private fun setupComponentCallbacks() {
+        // 连接状态变化回调
+        webSocketManager.setConnectionCallback(object : ConnectionCallback {
+            override fun onConnected() {
+                log.info("连接状态变更: 已连接");
+                updateStatusBarWidget()
+                editorStateManager.sendCurrentState(eventListenerManager.isActiveWindow())
+            }
+
+            override fun onDisconnected() {
+                log.info("连接状态变更: 已断开");
+                updateStatusBarWidget()
+            }
+
+            override fun onReconnecting() {
+                log.info("连接状态变更: 正在重连");
+                updateStatusBarWidget()
+            }
+        })
+
+        // 状态变化回调
+        editorStateManager.setStateChangeCallback(object : EditorStateManager.StateChangeCallback {
+            override fun onStateChanged(state: EditorState) {
+                if (eventListenerManager.isActiveWindow()) {
+                    operationQueueProcessor.addOperation(state)
+                }
+            }
+        })
+    }
+
+    /**
+     * 更新状态栏显示
+     */
     private fun updateStatusBarWidget() {
         ApplicationManager.getApplication().invokeLater {
-            val statusBar = WindowManager.getInstance().getStatusBar(project)
+            val statusBar = com.intellij.openapi.wm.WindowManager.getInstance().getStatusBar(project)
             val widget = statusBar?.getWidget(SyncStatusBarWidget.ID) as? SyncStatusBarWidget
             widget?.updateUI()
         }
     }
 
+
+    /**
+     * 切换自动重连状态
+     */
     fun toggleAutoReconnect() {
-        autoReconnect = !autoReconnect
-
-        if (!autoReconnect) {
-            // Close the connection when turning sync off
-            webSocket?.let { client ->
-                if (client.isOpen) {
-                    client.close()
-                }
-            }
-            webSocket = null
-            isConnected = false
-            isReconnecting = false
-            log.info("Sync disabled and connection closed")
-        } else {
-            log.info("Sync enabled")
-            isReconnecting = true
-            updateStatusBarWidget()
-            connectWebSocket()
-        }
-
+        webSocketManager.toggleAutoReconnect()
         updateStatusBarWidget()
     }
 
-    private fun connectWebSocket() {
-        if (!autoReconnect) {
-            isReconnecting = false
-            updateStatusBarWidget()
-            log.info("Auto-reconnect is disabled")
-            return
-        }
+    // 公共接口方法（委托给各个模块）
 
-        isReconnecting = true
-        updateStatusBarWidget()
-        log.info("Attempting to connect to VSCode...")
-        try {
-            val port = VSCodeJetBrainsSyncSettings.getInstance(project).state.port
-            webSocket = object : WebSocketClient(URI("ws://localhost:${port}/jetbrains")) {
-                override fun onOpen(handshakedata: ServerHandshake?) {
-                    log.info("Successfully connected to VSCode on port $port")
-                    isConnected = true
-                    isReconnecting = false
-                    updateStatusBarWidget()
-                    NotificationGroupManager.getInstance()
-                        .getNotificationGroup("VSCode JetBrains Sync")
-                        .createNotification("Connected to VSCode", NotificationType.INFORMATION)
-                        .notify(project)
-                    // Send initial state
-                    val editor = FileEditorManager.getInstance(project).selectedTextEditor
-                    val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
-                    if (editor != null && file != null) {
-                        updateStateFromEditor(editor, file)
-                    }
-                }
+    fun isConnected(): Boolean = webSocketManager.isConnected()
+    fun isAutoReconnect(): Boolean = webSocketManager.isAutoReconnect()
+    fun isConnecting(): Boolean = webSocketManager.isConnecting()
+    fun isDisconnected(): Boolean = webSocketManager.isDisconnected()
 
-                override fun onMessage(message: String?) {
-                    log.info("Received message: $message")
-                    message?.let {
-                        try {
-                            val state = gson.fromJson(it, EditorState::class.java)
-                            if (state.source != "jetbrains") {
-                                handleIncomingState(state)
-                            }
-                        } catch (e: Exception) {
-                            log.info("Error parsing message: ${e.message}")
-                            e.printStackTrace()
-                        }
-                    }
-                }
-
-                override fun onClose(code: Int, reason: String?, remote: Boolean) {
-                    log.info("Disconnected from VSCode. Code: $code, Reason: $reason, Remote: $remote")
-                    isConnected = false
-                    updateStatusBarWidget()
-                    NotificationGroupManager.getInstance()
-                        .getNotificationGroup("VSCode JetBrains Sync")
-                        .createNotification("Disconnected from VSCode", NotificationType.WARNING)
-                        .notify(project)
-                    if (!isReconnecting && autoReconnect) {
-                        isReconnecting = true
-                        updateStatusBarWidget()
-                        ApplicationManager.getApplication().executeOnPooledThread {
-                            log.info("Attempting to reconnect in 5 seconds...")
-                            Thread.sleep(5000)
-                            ApplicationManager.getApplication().invokeLater {
-                                connectWebSocket()
-                            }
-                        }
-                    }
-                }
-
-                override fun onError(ex: Exception?) {
-                    log.info("WebSocket error occurred:")
-                    isConnected = false
-                    updateStatusBarWidget()
-                    ex?.printStackTrace()
-                }
-            }
-
-            webSocket?.connectionLostTimeout = 0
-            log.info("Connecting to VSCode...")
-            ApplicationManager.getApplication().executeOnPooledThread {
-                val connectResult = webSocket?.connectBlocking()
-                log.info("Connection attempt result: $connectResult")
-                if (connectResult != true) {
-                    isReconnecting = true
-                    updateStatusBarWidget()
-                    Thread.sleep(5000)
-                    ApplicationManager.getApplication().invokeLater {
-                        connectWebSocket()
-                    }
-                }
-            }
-
-        } catch (e: Exception) {
-            log.info("Failed to initialize WebSocket connection:")
-            isConnected = false
-            isReconnecting = true
-            updateStatusBarWidget()
-            e.printStackTrace()
-            ApplicationManager.getApplication().executeOnPooledThread {
-                Thread.sleep(5000)
-                ApplicationManager.getApplication().invokeLater {
-                    connectWebSocket()
-                }
-            }
-        }
-    }
-
-    private fun setupEditorListeners() {
-        project.messageBus.connect().subscribe(
-            FileEditorManagerListener.FILE_EDITOR_MANAGER,
-            object : FileEditorManagerListener {
-                override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-                    if (!isHandlingExternalUpdate) {
-                        val editor = source.selectedTextEditor
-                        editor?.let {
-                            updateStateFromEditor(it, file)
-                            setupCaretListener(it, file)
-                        }
-                    }
-                }
-
-                override fun selectionChanged(event: FileEditorManagerEvent) {
-                    if (!isHandlingExternalUpdate && event.newFile != null) {
-                        val editor = FileEditorManager.getInstance(project).selectedTextEditor
-                        editor?.let {
-                            updateStateFromEditor(it, event.newFile!!)
-                            setupCaretListener(it, event.newFile!!)
-                        }
-                    }
-                }
-            }
-        )
-    }
-
-    private fun setupCaretListener(editor: Editor, file: VirtualFile) {
-        editor.caretModel.addCaretListener(object : com.intellij.openapi.editor.event.CaretListener {
-            override fun caretPositionChanged(event: com.intellij.openapi.editor.event.CaretEvent) {
-                if (!isHandlingExternalUpdate) {
-                    updateStateFromEditor(editor, file)
-                }
-            }
-        })
-    }
-
-    private fun setupWindowListeners() {
-        val frame = WindowManager.getInstance().getFrame(project)
-        frame?.addWindowFocusListener(object : java.awt.event.WindowFocusListener {
-            override fun windowGainedFocus(e: java.awt.event.WindowEvent?) {
-                if (frame.isVisible && frame.state != java.awt.Frame.ICONIFIED && frame.isFocused) {
-                    isActive = true
-                    val editor = FileEditorManager.getInstance(project).selectedTextEditor
-                    val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
-                    if (editor != null && file != null) {
-                        updateStateFromEditor(editor, file)
-                    }
-                }
-            }
-
-            override fun windowLostFocus(e: java.awt.event.WindowEvent?) {
-                isActive = false
-                val editor = FileEditorManager.getInstance(project).selectedTextEditor
-                val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
-                if (editor != null && file != null) {
-                    updateStateFromEditor(editor, file)
-                }
-            }
-        })
-    }
-
-    private fun updateStateFromEditor(editor: Editor, file: VirtualFile) {
-        val state = EditorState(
-            filePath = file.path,
-            line = editor.caretModel.logicalPosition.line,
-            column = editor.caretModel.logicalPosition.column,
-            isActive = isActive
-        )
-        updateState(state)
-    }
-
-    private fun handleIncomingState(state: EditorState) {
-        // Only handle incoming state if the other IDE is active
-        if (!state.isActive) {
-            log.info("Ignoring update from inactive VSCode")
-            return
-        }
-
-        isHandlingExternalUpdate = true
-        try {
-            ApplicationManager.getApplication().invokeLater {
-                try {
-                    val file = File(state.filePath)
-                    val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(file)
-
-                    virtualFile?.let { it ->
-                        val fileEditorManager = FileEditorManager.getInstance(project)
-                        // first check if the file is already open
-                        val existingEditor = fileEditorManager.selectedEditors.firstOrNull { it.file == virtualFile } as? TextEditor
-                        val editor = existingEditor ?: fileEditorManager.openFile(it, false).firstOrNull() as? TextEditor
-
-                        editor?.let { textEditor ->
-                            val position = LogicalPosition(state.line, state.column)
-                            ApplicationManager.getApplication().runWriteAction {
-                                textEditor.editor.caretModel.moveToLogicalPosition(position)
-
-                                // only scroll if the caret is not visible
-                                val visibleArea = textEditor.editor.scrollingModel.visibleArea
-                                val targetPoint = textEditor.editor.logicalPositionToXY(position)
-                                if (!visibleArea.contains(targetPoint)) {
-                                    textEditor.editor.scrollingModel.scrollToCaret(ScrollType.MAKE_VISIBLE)
-                                }
-                            }
-                        }
-                    }
-                } catch (e: Exception) {
-                    log.info("Error handling incoming state: ${e.message}")
-                }
-            }
-        } finally {
-            isHandlingExternalUpdate = false
-        }
-    }
-
-    private fun updateState(state: EditorState) {
-        if (!isHandlingExternalUpdate) {
-            webSocket?.let { client ->
-                if (client.isOpen) {
-                    // Only send updates if we're active
-                    if (isActive) {
-                        log.info("Sending state update (JetBrains is active): ${gson.toJson(state)}")
-                        client.send(gson.toJson(state))
-                    } else {
-                        log.info("Skipping state update (JetBrains is not active)")
-                    }
-                } else {
-                    log.info("WebSocket is not open. Current state: ${client.readyState}")
-                    if (!isReconnecting) {
-                        connectWebSocket()
-                    }
-                }
-            } ?: run {
-                log.info("WebSocket client is null, attempting to reconnect...")
-                connectWebSocket()
-            }
-        }
-    }
-
-    fun isConnected(): Boolean = isConnected
-    fun isAutoReconnectEnabled(): Boolean = autoReconnect
-    fun isReconnecting(): Boolean = isReconnecting
-
+    /**
+     * 重启连接
+     */
     fun restartConnection() {
-        webSocket?.let { client ->
-            if (client.isOpen) {
-                client.close()
-            }
-        }
-        webSocket = null
-        isConnected = false
-        connectWebSocket()
+        webSocketManager.restartConnection()
+    }
+
+
+    /**
+     * 清理资源
+     */
+    override fun dispose() {
+        log.info("开始清理同步服务资源（重构版）")
+
+        // 按顺序清理各个组件
+        operationQueueProcessor.dispose()
+        webSocketManager.dispose()
+        editorStateManager.dispose()
+        eventListenerManager.dispose()
+
+        log.info("同步服务资源清理完成")
     }
 }

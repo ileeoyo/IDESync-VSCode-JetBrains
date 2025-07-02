@@ -1,7 +1,7 @@
 {
   "name": "vscode-jetbrains-sync",
   "displayName": "IDE Sync - Connect to JetBrains IDE",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "publisher": "denisbalber",
   "description": "VSCode extension for synchronizing with JetBrains IDE",
   "icon": "icon.png",

@@ -1,271 +1,173 @@
 import * as vscode from 'vscode';
-import WebSocket, { WebSocketServer, RawData } from 'ws';
+import {EditorState, ConnectionCallback, ConnectionState} from './Type';
+import {Logger} from './Logger';
+import {EditorStateManager} from './EditorStateManager';
+import {FileOperationHandler} from './FileOperationHandler';
+import {EventListenerManager} from './EventListenerManager';
+import {MessageProcessor} from './MessageProcessor';
+import {WebSocketServerManager} from './WebSocketServerManager';
+import {OperationQueueProcessor} from './OperationQueueProcessor';
 
-interface SyncState {
-    filePath: string;
-    line: number;
-    column: number;
-    source: 'vscode' | 'jetbrains';
-    isActive: boolean;
-}
-
+/**
+ * VSCode与JetBrains同步类（重构版）
+ *
+ * 采用模块化设计，主要组件：
+ * - WebSocket服务器管理器：负责服务器管理和客户端连接
+ * - 编辑器状态管理器：管理状态缓存、防抖和去重
+ * - 文件操作处理器：处理文件的打开、关闭和导航
+ * - 事件监听管理器：统一管理各种事件监听器
+ * - 消息处理器：处理消息的序列化和反序列化
+ * - 操作队列处理器：确保操作的原子性和顺序性
+ */
 export class VSCodeJetBrainsSync {
-    private wss: WebSocketServer | null = null;
-    private jetbrainsClient: WebSocket | null = null;
-    private disposables: vscode.Disposable[] = [];
-    private currentState: SyncState | null = null;
-    private isActive: boolean = false;
+    // 核心组件
+    private logger: Logger;
+    private editorStateManager!: EditorStateManager;
+    private fileOperationHandler!: FileOperationHandler;
+    private messageProcessor!: MessageProcessor;
+    private webSocketManager!: WebSocketServerManager;
+    private eventListenerManager!: EventListenerManager;
+    private operationQueueProcessor!: OperationQueueProcessor;
+
+    // UI组件
     private statusBarItem: vscode.StatusBarItem;
-    private isConnected: boolean = false;
-    private autoReconnect: boolean = false;
 
     constructor() {
+        this.logger = new Logger('IDE 同步');
         this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
         this.statusBarItem.command = 'vscode-jetbrains-sync.toggleAutoReconnect';
-        this.updateStatusBarItem();
+
+        this.initializeComponents();
+        this.setupComponentCallbacks();
+        this.eventListenerManager.setupEditorListeners();
+        this.eventListenerManager.setupWindowListeners();
+
+        this.updateStatusBarWidget();
         this.statusBarItem.show();
-        
-        // Initialize WebSocket server
-        this.setupServer();
-        this.setupEditorListeners();
-        this.setupWindowListeners();
-        this.isActive = vscode.window.state.focused;
+
+        this.logger.info('VSCode-JetBrains同步服务初始化完成');
     }
 
-    private updateStatusBarItem() {
-        let icon = '$(sync~spin)';
-        if (this.isConnected) {
-            icon = '$(check)';
-        } else if (!this.autoReconnect) {
-            icon = '$(sync-ignored)';
-        }
-        
-        this.statusBarItem.text = `${icon} ${this.autoReconnect ? 'IDE Sync On' : 'Turn IDE Sync On'}`;
-        this.statusBarItem.tooltip = `${this.isConnected ? 'Connected to JetBrains IDE\n' : 'Waiting for JetBrains IDE connection\n'}Click to turn sync ${this.autoReconnect ? 'off' : 'on'}`;
+    /**
+     * 初始化各个组件
+     */
+    private initializeComponents() {
+        this.editorStateManager = new EditorStateManager(this.logger);
+        this.fileOperationHandler = new FileOperationHandler(this.logger);
+        this.messageProcessor = new MessageProcessor(this.logger, this.fileOperationHandler);
+        this.webSocketManager = new WebSocketServerManager(this.logger, this.messageProcessor);
+        this.eventListenerManager = new EventListenerManager(this.logger, this.editorStateManager);
+        this.operationQueueProcessor = new OperationQueueProcessor(
+            this.messageProcessor, this.logger, this.webSocketManager
+        );
     }
 
-    public toggleAutoReconnect() {
-        this.autoReconnect = !this.autoReconnect;
-        
-        if (!this.autoReconnect) {
-            // Close existing connections when turning sync off
-            if (this.jetbrainsClient) {
-                this.jetbrainsClient.close();
-                this.jetbrainsClient = null;
+    /**
+     * 设置组件间的回调关系
+     */
+    private setupComponentCallbacks() {
+        // 连接状态变化回调
+        const connectionCallback: ConnectionCallback = {
+            onConnected: () => {
+                this.logger.info('连接状态变更: 已连接');
+                this.updateStatusBarWidget();
+                this.editorStateManager.sendCurrentState(this.eventListenerManager.isActiveWindow());
+            },
+            onDisconnected: () => {
+                this.logger.info('连接状态变更: 已断开');
+                this.updateStatusBarWidget();
+            },
+            onReconnecting: () => {
+                this.logger.info('连接状态变更: 重连中');
+                this.updateStatusBarWidget();
             }
-            if (this.wss) {
-                this.wss.close(() => {
-                    console.log('WebSocket server closed');
-                });
-                this.wss = null;
+        };
+
+        this.webSocketManager.setConnectionCallback(connectionCallback);
+
+        // 状态变化回调
+        this.editorStateManager.setStateChangeCallback((state: EditorState) => {
+            if (this.eventListenerManager.isActiveWindow()) {
+                this.operationQueueProcessor.addOperation(state);
             }
-            this.isConnected = false;
-            vscode.window.showInformationMessage('Sync disabled');
-        } else {
-            vscode.window.showInformationMessage('Sync enabled');
-            this.setupServer();
-        }
-        
-        this.updateStatusBarItem();
+        });
     }
 
-    private setupServer() {
-        if (!this.autoReconnect) {
-            return;
-        }
 
-        if (this.wss) {
-            this.wss.close(() => {
-                console.log('Closing existing WebSocket server');
-            });
-        }
+    /**
+     * 更新状态栏显示
+     */
+    private updateStatusBarWidget() {
+        const autoReconnect = this.webSocketManager.isAutoReconnect();
+        const connectionState = this.webSocketManager.getConnectionState()
 
-        const port = vscode.workspace.getConfiguration('vscode-jetbrains-sync').get('port', 3000);
-        this.wss = new WebSocketServer({ port });
-        console.log(`Starting WebSocket server on port ${port}...`);
-        
-        this.wss.on('connection', (ws: WebSocket, request) => {
-            const clientType = request.url?.slice(1); // Remove leading slash
-
-            if (clientType === 'jetbrains') {
-                if (this.jetbrainsClient) {
-                    this.jetbrainsClient.close();
-                }
-                this.jetbrainsClient = ws;
-                this.isConnected = true;
-                this.updateStatusBarItem();
-                console.log('JetBrains IDE client connected');
-                vscode.window.showInformationMessage('JetBrains IDE connected');
+        // 参考Kotlin实现的图标状态逻辑
+        const icon = (() => {
+            if (connectionState === ConnectionState.CONNECTED) {
+                return '$(check)';
+            } else if ((connectionState === ConnectionState.CONNECTING || connectionState === ConnectionState.DISCONNECTED) && autoReconnect) {
+                return '$(sync~spin)';
             } else {
-                ws.close();
-                return;
+                return '$(circle-outline)';
             }
+        })();
 
-            ws.on('message', (data: RawData) => {
-                try {
-                    const state: SyncState = JSON.parse(data.toString());
-                    this.handleIncomingState(state);
-                } catch (error) {
-                    console.error('Error parsing message:', error);
-                    vscode.window.showErrorMessage('Error handling sync message');
-                }
-            });
+        // 参考Kotlin实现的文本状态逻辑
+        const statusText = autoReconnect ? 'IDE Sync On' : 'Turn IDE Sync On';
 
-            ws.on('close', () => {
-                if (this.jetbrainsClient === ws) {
-                    this.jetbrainsClient = null;
-                    this.isConnected = false;
-                    this.updateStatusBarItem();
-                    console.log('JetBrains IDE client disconnected');
-                    vscode.window.showWarningMessage('JetBrains IDE disconnected');
-                }
-            });
-
-            ws.on('error', (error: Error) => {
-                console.error('WebSocket error:', error);
-                this.isConnected = false;
-                this.updateStatusBarItem();
-                vscode.window.showErrorMessage('WebSocket error occurred');
-            });
-        });
-
-        this.wss.on('listening', () => {
-            console.log(`WebSocket server is listening on port ${port}`);
-        });
-
-        this.wss.on('error', (error: Error) => {
-            console.error('WebSocket server error:', error);
-            vscode.window.showErrorMessage('Failed to start WebSocket server');
-        });
-    }
-
-    private setupEditorListeners() {
-        // Listen for active editor changes
-        this.disposables.push(
-            vscode.window.onDidChangeActiveTextEditor((editor) => {
-                if (editor && !this.isHandlingExternalUpdate) {
-                    const document = editor.document;
-                    const position = editor.selection.active;
-                    this.updateState({
-                        filePath: document.uri.fsPath,
-                        line: position.line,
-                        column: position.character,
-                        source: 'vscode',
-                        isActive: this.isActive
-                    });
-                }
-            })
-        );
-
-        // Listen for cursor position changes
-        this.disposables.push(
-            vscode.window.onDidChangeTextEditorSelection((event) => {
-                if (event.textEditor === vscode.window.activeTextEditor && !this.isHandlingExternalUpdate) {
-                    const document = event.textEditor.document;
-                    const position = event.selections[0].active;
-                    this.updateState({
-                        filePath: document.uri.fsPath,
-                        line: position.line,
-                        column: position.character,
-                        source: 'vscode',
-                        isActive: this.isActive
-                    });
-                }
-            })
-        );
-    }
-
-    private setupWindowListeners() {
-        this.disposables.push(
-            vscode.window.onDidChangeWindowState((e) => {
-                this.isActive = e.focused;
-                if (this.currentState) {
-                    const state: SyncState = {
-                        ...this.currentState,
-                        isActive: this.isActive,
-                        source: 'vscode'
-                    };
-                    this.updateState(state);
-                }
-            })
-        );
-    }
-
-    private isHandlingExternalUpdate = false;
-
-    private async handleIncomingState(state: SyncState) {
-        if (state.source === 'vscode') {
-            return; // Ignore our own updates
-        }
-
-        // Only handle incoming state if the other IDE is active
-        if (!state.isActive) {
-            console.log('Ignoring update from inactive JetBrains IDE');
-            return;
-        }
-
-        try {
-            this.isHandlingExternalUpdate = true;
-            const uri = vscode.Uri.file(state.filePath);
-            const document = await vscode.workspace.openTextDocument(uri);
-            const editor = await vscode.window.showTextDocument(document, {preview: false});
-            
-            const position = new vscode.Position(state.line, state.column);
-            editor.selection = new vscode.Selection(position, position);
-            
-            editor.revealRange(
-                new vscode.Range(position, position),
-                vscode.TextEditorRevealType.InCenter
-            );
-        } catch (error) {
-            console.error('Error handling incoming state:', error);
-            vscode.window.showErrorMessage(`Failed to open file: ${state.filePath}`);
-        } finally {
-            this.isHandlingExternalUpdate = false;
-        }
-    }
-
-    public updateState(state: SyncState) {
-        this.currentState = state;
-        if (this.jetbrainsClient?.readyState === WebSocket.OPEN) {
-            try {
-                // Only send updates if we're active
-                if (this.isActive) {
-                    console.log('Sending state update (VSCode is active):', state);
-                    this.jetbrainsClient.send(JSON.stringify(state));
-                } else {
-                    console.log('Skipping state update (VSCode is not active)');
-                }
-            } catch (error) {
-                console.error('Error sending state:', error);
-                vscode.window.showErrorMessage('Failed to sync VSCode position');
+        // 参考Kotlin实现的工具提示逻辑
+        const tooltip = (() => {
+            let tip = '';
+            if (connectionState === ConnectionState.CONNECTED) {
+                tip += 'Connected to JetBrains IDE\n';
             }
-        }
+            tip += `Click to turn sync ${autoReconnect ? 'off' : 'on'}`;
+            return tip;
+        })();
+
+        this.statusBarItem.text = `${icon} ${statusText}`;
+        this.statusBarItem.tooltip = tooltip;
     }
 
+
+    /**
+     * 切换自动重连状态
+     */
+    public toggleAutoReconnect() {
+        this.webSocketManager.toggleAutoReconnect();
+        this.updateStatusBarWidget();
+    }
+
+
+    /**
+     * 清理资源
+     */
     public dispose() {
-        if (this.wss) {
-            this.wss.close(() => {
-                console.log('WebSocket server closed');
-            });
-        }
+        this.logger.info('开始清理VSCode同步服务资源（重构版）');
+
+        this.operationQueueProcessor.dispose();
+        this.webSocketManager.dispose();
+        this.eventListenerManager.dispose();
+        this.editorStateManager.dispose();
         this.statusBarItem.dispose();
-        this.disposables.forEach(d => d.dispose());
+        this.logger.dispose();
+
+        this.logger.info('VSCode同步服务资源清理完成');
     }
 }
 
-// Export activation and deactivation functions
+// 导出激活和停用函数
 let syncInstance: VSCodeJetBrainsSync | null = null;
 
 export function activate(context: vscode.ExtensionContext) {
     syncInstance = new VSCodeJetBrainsSync();
-    
+
     context.subscriptions.push(
         vscode.commands.registerCommand('vscode-jetbrains-sync.toggleAutoReconnect', () => {
             syncInstance?.toggleAutoReconnect();
         })
     );
-    
+
     context.subscriptions.push({
         dispose: () => syncInstance?.dispose()
     });
@@ -273,4 +175,4 @@ export function activate(context: vscode.ExtensionContext) {
 
 export function deactivate() {
     syncInstance?.dispose();
-} 
+}

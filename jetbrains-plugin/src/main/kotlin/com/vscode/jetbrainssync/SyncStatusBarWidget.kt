@@ -13,7 +13,8 @@ import com.intellij.openapi.diagnostic.Logger
 
 class SyncStatusBarWidget(
     private val project: Project,
-    private val syncService: VSCodeJetBrainsSyncService) : CustomStatusBarWidget {
+    private val syncService: VSCodeJetBrainsSyncService
+) : CustomStatusBarWidget {
     companion object {
         const val ID = "VSCodeJetBrainsSync"
         private const val SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
@@ -31,8 +32,8 @@ class SyncStatusBarWidget(
         // Start spinner animation timer
         spinnerTimer = Timer().apply {
             scheduleAtFixedRate(object : TimerTask() {
-                override fun run(){ 
-                    if (syncService.isReconnecting()) {
+                override fun run() {
+                    if ((syncService.isConnecting() || syncService.isDisconnected()) && syncService.isAutoReconnect()) {
                         spinnerIndex = (spinnerIndex + 1) % SPINNER_FRAMES.length
                         ApplicationManager.getApplication().invokeLater {
                             updateUI()
@@ -56,13 +57,13 @@ class SyncStatusBarWidget(
             log.info("Updating status bar widget UI")
             val icon = when {
                 syncService.isConnected() -> "✓"
-                syncService.isReconnecting() && syncService.isAutoReconnectEnabled() -> SPINNER_FRAMES[spinnerIndex].toString()
+                (syncService.isConnecting() || syncService.isDisconnected()) && syncService.isAutoReconnect() -> SPINNER_FRAMES[spinnerIndex].toString()
                 else -> "○"
             }
-            component.text = "$icon ${if (syncService.isAutoReconnectEnabled()) "IDE Sync On" else "Turn IDE Sync On"}"
+            component.text = "$icon ${if (syncService.isAutoReconnect()) "IDE Sync On" else "Turn IDE Sync On"}"
             component.toolTipText = buildString {
                 if (syncService.isConnected()) append("Connected to VSCode\n")
-                append("Click to turn sync ${if (syncService.isAutoReconnectEnabled()) "off" else "on"}")
+                append("Click to turn sync ${if (syncService.isAutoReconnect()) "off" else "on"}")
             }
             component.repaint()
         }
