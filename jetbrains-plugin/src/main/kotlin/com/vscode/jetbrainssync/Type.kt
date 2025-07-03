@@ -102,19 +102,34 @@ data class EditorState(
 
     /**
      * 转换路径为IDEA格式
-     * VSCode格式: c:\Users\LEE\Documents\...
-     * IDEA格式: C:/Users/LEE/Documents/...
+     * 处理跨平台路径兼容性，确保路径格式统一
      */
     private fun convertToIdeaFormat(path: String): String {
         var ideaPath = path
 
-        // 将反斜杠替换为正斜杠
-        ideaPath = ideaPath.replace('\\', '/')
+        // 获取操作系统信息
+        val osName = System.getProperty("os.name").lowercase()
+        val isWindows = osName.contains("windows")
+        val isMacOS = osName.contains("mac")
+        val isLinux = osName.contains("linux") || osName.contains("unix")
 
-        // 处理盘符：将小写盘符转为大写
-        // 匹配 c:/ 或 c: 格式的盘符
-        if (ideaPath.matches(Regex("^[a-z]:/.*")) || ideaPath.matches(Regex("^[a-z]:.*"))) {
-            ideaPath = ideaPath[0].uppercaseChar() + ideaPath.substring(1)
+        if (isWindows) {
+            // Windows: 将反斜杠替换为正斜杠，处理盘符大小写
+            ideaPath = ideaPath.replace('\\', '/')
+            if (ideaPath.matches(Regex("^[a-z]:/.*")) || ideaPath.matches(Regex("^[a-z]:.*"))) {
+                ideaPath = ideaPath[0].uppercaseChar() + ideaPath.substring(1)
+            }
+        } else if (isMacOS || isLinux) {
+            // macOS/Linux: 确保使用正斜杠，保持Unix路径格式
+            ideaPath = ideaPath.replace('\\', '/')
+            
+            // 确保路径以 / 开头（Unix绝对路径）
+            if (!ideaPath.startsWith('/')) {
+                ideaPath = "/$ideaPath"
+            }
+            
+            // 清理重复的斜杠
+            ideaPath = ideaPath.replace(Regex("/+"), "/")
         }
 
         return ideaPath
