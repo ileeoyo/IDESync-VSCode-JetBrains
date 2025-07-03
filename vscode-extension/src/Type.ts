@@ -112,19 +112,39 @@ export class EditorState {
 
     /**
      * 转换路径为VSCode格式
-     * IDEA格式: C:/Users/LEE/Documents/...
-     * VSCode格式: c:\Users\LEE\Documents\...
+     * 处理跨平台路径兼容性
      */
     private convertToVSCodeFormat(path: string): string {
         let vscodePath = path;
 
-        // 将正斜杠替换为反斜杠
-        vscodePath = vscodePath.replace(/\//g, '\\');
+        // 检测操作系统平台
+        const isWindows = process.platform === 'win32';
+        const isMacOS = process.platform === 'darwin';
+        const isLinux = process.platform === 'linux';
 
-        // 处理盘符：将大写盘符转为小写
-        // 匹配 C:\ 或 C: 格式的盘符
-        if (/^[A-Z]:\\/.test(vscodePath) || /^[A-Z]:/.test(vscodePath)) {
-            vscodePath = vscodePath[0].toLowerCase() + vscodePath.substring(1);
+        if (isWindows) {
+            // Windows: 将正斜杠替换为反斜杠，盘符转小写
+            vscodePath = vscodePath.replace(/\//g, '\\');
+            if (/^[A-Z]:\\/.test(vscodePath) || /^[A-Z]:/.test(vscodePath)) {
+                vscodePath = vscodePath[0].toLowerCase() + vscodePath.substring(1);
+            }
+        } else if (isMacOS || isLinux) {
+            // macOS/Linux: 确保使用正斜杠，移除Windows盘符格式
+            vscodePath = vscodePath.replace(/\\/g, '/');
+            
+            // 移除Windows盘符（如果存在）并转换为Unix路径
+            if (/^[A-Za-z]:[\/\\]/.test(vscodePath)) {
+                // 例如: C:/Users/... -> /Users/... 或 c:\Users\... -> /Users/...
+                vscodePath = vscodePath.substring(2).replace(/\\/g, '/');
+            }
+            
+            // 确保路径以 / 开头
+            if (!vscodePath.startsWith('/')) {
+                vscodePath = '/' + vscodePath;
+            }
+            
+            // 清理重复的斜杠
+            vscodePath = vscodePath.replace(/\/+/g, '/');
         }
 
         return vscodePath;
