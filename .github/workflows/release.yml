@@ -1,0 +1,293 @@
+name: Build and Release Plugins
+
+on:
+    # 手动触发
+    workflow_dispatch:
+        inputs:
+            tag_name:
+                description: "Tag name (format: v2.3.0 or v2.3.0-beta)"
+                required: true
+                type: string
+            release_description:
+                description: "Release description"
+                required: true
+                default: "New release"
+                type: string
+
+    # 推送附注标签时自动触发（兼容标准版本和预发布版本）
+    push:
+        tags:
+            - "v[0-9]+.[0-9]+.[0-9]+"      # 标准版本：v1.0.0
+            - "v[0-9]+.[0-9]+.[0-9]+-*"    # 预发布版本：v1.0.0-beta
+
+permissions:
+    contents: write
+    actions: read
+
+jobs:
+    # 检查和创建tag（仅手动触发时）
+    check-and-create-tag:
+        runs-on: ubuntu-latest
+        outputs:
+            should_continue: ${{ steps.check-tag.outputs.should_continue }}
+            version: ${{ steps.extract-version.outputs.version }}
+            tag_name: ${{ steps.extract-version.outputs.tag_name }}
+            is_prerelease: ${{ steps.extract-version.outputs.is_prerelease }}
+        
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Check if tag exists and validate
+              id: check-tag
+              run: |
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                    TAG_NAME="${{ github.event.inputs.tag_name }}"
+                    
+                    # 先验证tag格式（支持标准版本和预发布版本）
+                    if ! echo "$TAG_NAME" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+(-.*)?$'; then
+                      echo "Error: Invalid tag format '$TAG_NAME'. Expected format: v2.3.0 or v2.3.0-beta"
+                      echo "Please use semantic versioning format with 'v' prefix (e.g., v1.0.0, v2.1.3, v1.0.0-beta)"
+                      echo "should_continue=false" >> $GITHUB_OUTPUT
+                      exit 1
+                    fi
+                    
+                    # 检查tag是否存在
+                    if git rev-parse "refs/tags/$TAG_NAME" >/dev/null 2>&1; then
+                      echo "Tag $TAG_NAME already exists"
+                      
+                      # 检查是否为附注标签
+                      if git cat-file -t "refs/tags/$TAG_NAME" | grep -q "tag"; then
+                        echo "Tag $TAG_NAME is an annotated tag, continuing workflow"
+                        echo "should_continue=true" >> $GITHUB_OUTPUT
+                      else
+                        echo "Tag $TAG_NAME is a lightweight tag, stopping workflow"
+                        echo "should_continue=false" >> $GITHUB_OUTPUT
+                      fi
+                    else
+                      echo "Tag $TAG_NAME does not exist, creating annotated tag"
+                      git config user.name "github-actions[bot]"
+                      git config user.email "github-actions[bot]@users.noreply.github.com"
+                      git tag -a "$TAG_NAME" -m "${{ github.event.inputs.release_description }}"
+                      git push origin "$TAG_NAME"
+                      echo "should_continue=true" >> $GITHUB_OUTPUT
+                    fi
+                  else
+                    # 对于push事件，直接继续
+                    echo "should_continue=true" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Extract version from tag
+              id: extract-version
+              run: |
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                    TAG_NAME="${{ github.event.inputs.tag_name }}"
+                  else
+                    TAG_NAME="${{ github.ref_name }}"
+                  fi
+                  
+                  # 输出tag名称
+                  echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+                  echo "Tag name: $TAG_NAME"
+                  
+                  # 从tag名称提取版本号 (例如: v2.3.0 -> 2.3.0, v2.3.0-beta -> 2.3.0-beta)
+                  VERSION=$(echo "$TAG_NAME" | sed -n 's/^v\([0-9]\+\.[0-9]\+\.[0-9]\+.*\)$/\1/p')
+                  if [ -z "$VERSION" ]; then
+                    echo "Error: Invalid tag format '$TAG_NAME'. Expected format: v2.3.0 or v2.3.0-beta"
+                    echo "Please use semantic versioning format with 'v' prefix (e.g., v1.0.0, v2.1.3, v1.0.0-beta)"
+                    exit 1
+                  fi
+                  echo "version=$VERSION" >> $GITHUB_OUTPUT
+                  echo "Extracted version: $VERSION"
+                  
+                  # 检查是否为预发布版本
+                  if echo "$TAG_NAME" | grep -q "-"; then
+                    echo "is_prerelease=true" >> $GITHUB_OUTPUT
+                    echo "Detected prerelease version: $TAG_NAME"
+                  else
+                    echo "is_prerelease=false" >> $GITHUB_OUTPUT
+                    echo "Detected stable version: $TAG_NAME"
+                  fi
+
+    # 并行构建JetBrains插件
+    build-jetbrains:
+        needs: [check-and-create-tag]
+        if: needs.check-and-create-tag.outputs.should_continue == 'true'
+        runs-on: ubuntu-latest
+        outputs:
+            plugin-file: ${{ steps.build.outputs.plugin-file }}
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Set up JDK 17
+              uses: actions/setup-java@v4
+              with:
+                  java-version: "17"
+                  distribution: "temurin"
+
+            - name: Setup Gradle
+              uses: gradle/actions/setup-gradle@v4
+              with:
+                  cache-read-only: false
+
+            - name: Grant execute permission for gradlew
+              run: chmod +x jetbrains-plugin/gradlew
+
+            - name: Build JetBrains plugin
+              id: build
+              run: |
+                  cd jetbrains-plugin
+                  ./gradlew buildPlugin
+                  # 查找生成的插件文件
+                  PLUGIN_FILE=$(find build/distributions -name "*.zip" -type f | head -1)
+                  if [ -z "$PLUGIN_FILE" ]; then
+                    echo "Error: No .zip file found in build/distributions"
+                    exit 1
+                  fi
+                  PLUGIN_NAME=$(basename "$PLUGIN_FILE")
+                  echo "plugin-file=$PLUGIN_NAME" >> $GITHUB_OUTPUT
+                  echo "Plugin file: $PLUGIN_NAME"
+                  echo "Full path: $PLUGIN_FILE"
+
+            - name: Upload JetBrains plugin artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: jetbrains-plugin
+                  path: jetbrains-plugin/build/distributions/*.zip
+                  retention-days: 1
+                  if-no-files-found: error
+
+    # 并行构建VSCode插件
+    build-vscode:
+        needs: [check-and-create-tag]
+        if: needs.check-and-create-tag.outputs.should_continue == 'true'
+        runs-on: ubuntu-latest
+        outputs:
+            plugin-file: ${{ steps.build.outputs.plugin-file }}
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+
+            - name: Set up Node.js 18
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "18"
+                  cache: "npm"
+                  cache-dependency-path: vscode-extension/package-lock.json
+
+            - name: Install dependencies
+              run: |
+                  cd vscode-extension
+                  npm install
+
+            - name: Build and package VSCode extension
+              id: build
+              run: |
+                  cd vscode-extension
+                  npm run build
+                  npm run package
+                  # 查找生成的vsix文件，确保路径正确
+                  PLUGIN_FILE=$(find . -name "*.vsix" -type f | head -1)
+                  if [ -z "$PLUGIN_FILE" ]; then
+                    echo "Error: No .vsix file found"
+                    exit 1
+                  fi
+                  PLUGIN_NAME=$(basename "$PLUGIN_FILE")
+                  echo "plugin-file=$PLUGIN_NAME" >> $GITHUB_OUTPUT
+                  echo "Plugin file: $PLUGIN_NAME"
+                  echo "Full path: $PLUGIN_FILE"
+
+            - name: Upload VSCode plugin artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: vscode-plugin
+                  path: vscode-extension/*.vsix
+                  retention-days: 1
+                  if-no-files-found: error
+
+    # 创建Release
+    create-release:
+        needs: [check-and-create-tag, build-jetbrains, build-vscode]
+        if: needs.check-and-create-tag.outputs.should_continue == 'true'
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Download JetBrains plugin artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: jetbrains-plugin
+                  path: ./artifacts/jetbrains-plugin
+
+            - name: Download VSCode plugin artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: vscode-plugin
+                  path: ./artifacts/vscode-plugin
+
+            # GitHub会自动为Release生成源代码下载链接，无需手动创建
+            # 格式：https://github.com/owner/repo/archive/refs/tags/v1.0.0.zip
+            # 格式：https://github.com/owner/repo/archive/refs/tags/v1.0.0.tar.gz
+
+            - name: Get release description
+              id: get-info
+              run: |
+                  # 获取release描述
+                  if [ "${{ github.event_name }}" = "push" ]; then
+                    # 如果是标签推送触发，获取标签的注释信息
+                    TAG_NAME="${{ needs.check-and-create-tag.outputs.tag_name }}"
+                    TAG_MESSAGE=$(git tag -l --format='%(contents)' $TAG_NAME)
+                    if [ -z "$TAG_MESSAGE" ]; then
+                      TAG_MESSAGE="Release $TAG_NAME"
+                    fi
+                    echo "description=$TAG_MESSAGE" >> $GITHUB_OUTPUT
+                  else
+                    # 如果是手动触发，使用用户输入的描述
+                    echo "description=${{ github.event.inputs.release_description }}" >> $GITHUB_OUTPUT
+                  fi
+
+            - name: Verify artifacts exist
+              run: |
+                  echo "Checking if artifacts exist..."
+                  JETBRAINS_FILE="./artifacts/jetbrains-plugin/${{ needs.build-jetbrains.outputs.plugin-file }}"
+                  VSCODE_FILE="./artifacts/vscode-plugin/${{ needs.build-vscode.outputs.plugin-file }}"
+                  
+                  if [ ! -f "$JETBRAINS_FILE" ]; then
+                    echo "Error: JetBrains plugin file not found: $JETBRAINS_FILE"
+                    exit 1
+                  fi
+                  
+                  if [ ! -f "$VSCODE_FILE" ]; then
+                    echo "Error: VSCode plugin file not found: $VSCODE_FILE"
+                    exit 1
+                  fi
+                  
+                  echo "All artifacts verified successfully"
+                  echo "JetBrains plugin: $JETBRAINS_FILE"
+                  echo "VSCode plugin: $VSCODE_FILE"
+
+            - name: Create Release
+              id: create_release
+              uses: softprops/action-gh-release@v2.3.2
+              with:
+                  tag_name: ${{ needs.check-and-create-tag.outputs.tag_name }}
+                  name: Release ${{ needs.check-and-create-tag.outputs.tag_name }}
+                  body: ${{ steps.get-info.outputs.description }}
+                  draft: false
+                  prerelease: ${{ needs.check-and-create-tag.outputs.is_prerelease }}
+                  files: |
+                      ./artifacts/jetbrains-plugin/${{ needs.build-jetbrains.outputs.plugin-file }}
+                      ./artifacts/vscode-plugin/${{ needs.build-vscode.outputs.plugin-file }}
+
+            # GitHub会自动为Release添加源代码下载链接，无需手动上传
