@@ -63,8 +63,14 @@ VSCodeJetBrainsSync-*.zip
 
 # Make sure Gradle files are completely ignored
 .gradle/
-**/gradle/
-!gradle/wrapper/gradle-wrapper.jar
-!gradle/wrapper/gradle-wrapper.properties
+# 不要忽略gradle目录本身，只忽略其内容
+**/gradle/*
+# 排除wrapper目录
+!**/gradle/wrapper/
+# 忽略wrapper目录下的所有文件
+**/gradle/wrapper/*
+# 精确收纳这2个文件
+!**/gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.properties
 build.sh
 .DS_Store
