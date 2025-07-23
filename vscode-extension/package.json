@@ -51,7 +51,7 @@
         "vscode-jetbrains-sync.port": {
           "type": "number",
           "default": 3000,
-          "description": "Port number for the WebSocket server"
+          "description": "Configure the port for synchronization with JetBrains IDE (use different ports to create separate sync groups)."
         }
       }
     }

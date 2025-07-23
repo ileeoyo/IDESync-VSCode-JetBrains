@@ -33,11 +33,12 @@
         </ol>
 
         <h3>Configuration</h3>
-        <p>You can adjust the WebSocket port in the settings:</p>
+        <p>You can adjust the port in the settings:</p>
         <ul>
             <li>Open JetBrains IDE settings</li>
             <li>Search for "IDE Sync - Connect to VSCode"</li>
             <li>Adjust the port (default: 3000)</li>
+            <li>Use different ports to create separate sync groups</li>
         </ul>
 
         <h3>Troubleshooting</h3>

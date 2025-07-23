@@ -22,7 +22,7 @@ class MulticastManager(
 
     // 组播配置
     private val multicastAddress = "224.0.0.100" // 组播地址
-    private val multicastPort = 23456 // 组播端口
+    private var multicastPort: Int // 组播端口（从配置读取）
     private val maxMessageSize = 8192 // 最大消息大小（8KB）
 
     // 网络组件
@@ -55,9 +55,29 @@ class MulticastManager(
     private val localIdentifier = generateLocalIdentifier()
 
     init {
+        // 从配置中读取组播端口（复用WebSocket端口配置）
+        multicastPort = VSCodeJetBrainsSyncSettings.getInstance(project).state.port
         log.info("初始化组播管理器 - 地址: $multicastAddress:$multicastPort")
         // 清理过期消息的定时任务
         startMessageCleanupTask()
+    }
+
+    /**
+     * 更新组播端口配置
+     */
+    fun updateMulticastPort() {
+        val newPort = VSCodeJetBrainsSyncSettings.getInstance(project).state.port
+        if (newPort != multicastPort) {
+            log.info("组播端口配置变更: $multicastPort -> $newPort")
+
+            // 更新端口
+            multicastPort = newPort
+
+            // 如果当前已启用自动重连，则重启连接
+            if (this.autoReconnect.get()) {
+                this.restartConnection();
+            }
+        }
     }
 
     /**
@@ -170,14 +190,15 @@ class MulticastManager(
     private fun findAvailableNetworkInterface(): NetworkInterface? {
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
-            
+
             // 优先选择非回环、活跃的接口
             for (netInterface in interfaces) {
-                if (!netInterface.isLoopback && 
-                    netInterface.isUp && 
+                if (!netInterface.isLoopback &&
+                    netInterface.isUp &&
                     netInterface.supportsMulticast() &&
-                    netInterface.inetAddresses.hasMoreElements()) {
-                    
+                    netInterface.inetAddresses.hasMoreElements()
+                ) {
+
                     log.info("找到合适的网络接口: ${netInterface.displayName}")
                     return netInterface
                 }
@@ -186,7 +207,7 @@ class MulticastManager(
             // 如果没有找到合适的接口，使用默认接口
             log.warn("未找到理想的网络接口，尝试使用默认接口")
             return NetworkInterface.getNetworkInterfaces().nextElement()
-            
+
         } catch (e: Exception) {
             log.warn("查找网络接口时发生错误: ${e.message}", e)
             return null
@@ -199,17 +220,17 @@ class MulticastManager(
     private fun startMessageReceiver() {
         receiverThread = thread(name = "Multicast-Message-Receiver") {
             val buffer = ByteArray(maxMessageSize)
-            
+
             while (!isShutdown.get() && isConnected()) {
                 try {
                     val packet = DatagramPacket(buffer, buffer.size)
                     multicastSocket?.receive(packet)
-                    
+
                     if (packet.length > 0) {
                         val message = String(packet.data, 0, packet.length, Charsets.UTF_8)
                         handleReceivedMessage(message)
                     }
-                    
+
                 } catch (e: SocketTimeoutException) {
                     // 超时是正常的，继续循环
                     continue
@@ -221,7 +242,7 @@ class MulticastManager(
                     }
                 }
             }
-            
+
             log.info("消息接收线程已退出")
         }
     }
@@ -232,16 +253,16 @@ class MulticastManager(
     private fun handleReceivedMessage(message: String) {
         try {
             log.info("收到组播消息: $message")
-            
+
             // 解析消息以检查发送者
             val messageData = parseMessageData(message)
-            
+
             // 检查是否是自己发送的消息
             if (messageData?.senderId == localIdentifier) {
                 log.debug("忽略自己发送的消息")
                 return
             }
-            
+
             // 检查消息是否已经处理过（去重）
             val messageId = messageData?.messageId
             if (messageId != null) {
@@ -250,22 +271,22 @@ class MulticastManager(
                     log.debug("忽略重复消息: $messageId")
                     return
                 }
-                
+
                 // 记录消息ID
                 receivedMessages[messageId] = currentTime
-                
+
                 // 限制缓存大小
                 if (receivedMessages.size > maxReceivedMessagesSize) {
                     cleanupOldMessages()
                 }
             }
-            
+
             // 提取实际的编辑器状态消息
             val editorStateMessage = messageData?.payload
             if (editorStateMessage != null) {
                 messageProcessor.handleIncomingMessage(editorStateMessage)
             }
-            
+
         } catch (e: Exception) {
             log.warn("处理接收到的消息时发生错误: ${e.message}", e)
         }
@@ -284,14 +305,14 @@ class MulticastManager(
             val messageId = generateMessageId()
             val wrappedMessage = wrapMessage(message, messageId)
             val messageBytes = wrappedMessage.toByteArray(Charsets.UTF_8)
-            
+
             if (messageBytes.size > maxMessageSize) {
                 log.warn("消息过大，无法发送: ${messageBytes.size} bytes")
                 return false
             }
 
             val packet = DatagramPacket(
-                messageBytes, 
+                messageBytes,
                 messageBytes.size,
                 InetAddress.getByName(multicastAddress),
                 multicastPort
@@ -300,7 +321,7 @@ class MulticastManager(
             multicastSocket?.send(packet)
             log.info("✅ 发送组播消息: $message")
             true
-            
+
         } catch (e: Exception) {
             log.warn("发送组播消息失败: ${e.message}", e)
             handleConnectionError()
@@ -359,14 +380,14 @@ class MulticastManager(
     private fun cleanupOldMessages() {
         val currentTime = System.currentTimeMillis()
         val iterator = receivedMessages.entries.iterator()
-        
+
         while (iterator.hasNext()) {
             val entry = iterator.next()
             if (currentTime - entry.value > messageTimeoutMs) {
                 iterator.remove()
             }
         }
-        
+
         log.debug("清理过期消息，当前缓存消息数: ${receivedMessages.size}")
     }
 
@@ -393,7 +414,7 @@ class MulticastManager(
      */
     private fun handleConnectionError() {
         setConnectionState(ConnectionState.DISCONNECTED)
-        
+
         if (autoReconnect.get() && !isShutdown.get()) {
             executorService.submit {
                 try {
@@ -478,7 +499,7 @@ class MulticastManager(
     // 状态查询方法
     fun isConnected(): Boolean = connectionState.get() == ConnectionState.CONNECTED
     fun isAutoReconnect(): Boolean = autoReconnect.get()
-    fun isConnecting(): Boolean = connectionState.get() == ConnectionState.CONNECTING  
+    fun isConnecting(): Boolean = connectionState.get() == ConnectionState.CONNECTING
     fun isDisconnected(): Boolean = connectionState.get() == ConnectionState.DISCONNECTED
     fun getConnectionState(): ConnectionState = connectionState.get()
 

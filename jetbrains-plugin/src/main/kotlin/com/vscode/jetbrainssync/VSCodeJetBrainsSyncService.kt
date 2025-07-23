@@ -116,10 +116,15 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     fun isDisconnected(): Boolean = multicastManager.isDisconnected()
 
     /**
-     * 重启连接
+     * 重启连接（WebSocket和组播）
      */
-    fun restartConnection() {
-        multicastManager.restartConnection()
+    fun updateMulticastPort() {
+        log.info("重启所有连接（WebSocket和组播）")
+        
+        // 更新组播端口配置
+        multicastManager.updateMulticastPort()
+        
+        updateStatusBarWidget()
     }
 
 

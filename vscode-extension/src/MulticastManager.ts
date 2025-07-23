@@ -1,5 +1,6 @@
 import * as dgram from 'dgram';
 import * as os from 'os';
+import * as vscode from 'vscode';
 import {ConnectionCallback, ConnectionState} from './Type';
 import {Logger} from './Logger';
 import {MessageProcessor} from './MessageProcessor';
@@ -14,7 +15,7 @@ export class MulticastManager {
 
     // 组播配置
     private readonly multicastAddress = '224.0.0.100'; // 组播地址
-    private readonly multicastPort = 23456; // 组播端口
+    private multicastPort: number; // 组播端口（从配置读取）
     private readonly maxMessageSize = 8192; // 最大消息大小（8KB）
 
     // 网络组件
@@ -46,7 +47,17 @@ export class MulticastManager {
         this.messageProcessor = messageProcessor;
         this.localIdentifier = this.generateLocalIdentifier();
 
+        // 从配置中读取组播端口（复用WebSocket端口配置）
+        this.multicastPort = vscode.workspace.getConfiguration('vscode-jetbrains-sync').get('port', 3000);
+
         this.logger.info(`初始化组播管理器 - 地址: ${this.multicastAddress}:${this.multicastPort}`);
+
+        // 监听配置变更
+        vscode.workspace.onDidChangeConfiguration((event) => {
+            if (event.affectsConfiguration('vscode-jetbrains-sync.port')) {
+                this.updateMulticastPort();
+            }
+        });
 
         // 启动消息清理定时任务
         this.startMessageCleanupTask();
@@ -63,6 +74,22 @@ export class MulticastManager {
             return `${hostname}-${pid}-${timestamp}`;
         } catch (e) {
             return `unknown-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+        }
+    }
+
+    /**
+     * 处理配置变更
+     */
+    private updateMulticastPort(): void {
+        const newPort = vscode.workspace.getConfiguration('vscode-jetbrains-sync').get('port', 3000);
+        if (newPort !== this.multicastPort) {
+            this.logger.info(`组播端口配置变更: ${this.multicastPort} -> ${newPort}`);
+            this.multicastPort = newPort;
+
+            // 如果当前已启用自动重连，则重启连接
+            if (this.autoReconnect) {
+                this.restartConnection();
+            }
         }
     }
 
