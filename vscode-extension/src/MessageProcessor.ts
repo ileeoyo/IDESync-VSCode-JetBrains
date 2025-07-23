@@ -60,10 +60,10 @@ export class MessageProcessor {
      * 验证消息有效性
      */
     private isValidMessage(state: EditorState): boolean {
-        // 忽略来自自己的消息
-        if (state.source === SourceType.VSCODE) {
-            return false;
-        }
+        // // 忽略来自自己的消息
+        // if (state.source === SourceType.VSCODE) {
+        //     return false;
+        // }
 
         // 只处理来自活跃IDE的消息
         if (!state.isActive) {

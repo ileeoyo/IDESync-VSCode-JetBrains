@@ -5,7 +5,7 @@ import {EditorStateManager} from './EditorStateManager';
 import {FileOperationHandler} from './FileOperationHandler';
 import {EventListenerManager} from './EventListenerManager';
 import {MessageProcessor} from './MessageProcessor';
-import {WebSocketServerManager} from './WebSocketServerManager';
+import {MulticastManager} from './MulticastManager';
 import {OperationQueueProcessor} from './OperationQueueProcessor';
 
 /**
@@ -25,7 +25,7 @@ export class VSCodeJetBrainsSync {
     private editorStateManager!: EditorStateManager;
     private fileOperationHandler!: FileOperationHandler;
     private messageProcessor!: MessageProcessor;
-    private webSocketManager!: WebSocketServerManager;
+    private multicastManager!: MulticastManager;
     private eventListenerManager!: EventListenerManager;
     private operationQueueProcessor!: OperationQueueProcessor;
 
@@ -55,10 +55,10 @@ export class VSCodeJetBrainsSync {
         this.editorStateManager = new EditorStateManager(this.logger);
         this.fileOperationHandler = new FileOperationHandler(this.logger);
         this.messageProcessor = new MessageProcessor(this.logger, this.fileOperationHandler);
-        this.webSocketManager = new WebSocketServerManager(this.logger, this.messageProcessor);
+        this.multicastManager = new MulticastManager(this.logger, this.messageProcessor);
         this.eventListenerManager = new EventListenerManager(this.logger, this.editorStateManager);
         this.operationQueueProcessor = new OperationQueueProcessor(
-            this.messageProcessor, this.logger, this.webSocketManager
+            this.messageProcessor, this.logger, this.multicastManager
         );
     }
 
@@ -69,21 +69,21 @@ export class VSCodeJetBrainsSync {
         // 连接状态变化回调
         const connectionCallback: ConnectionCallback = {
             onConnected: () => {
-                this.logger.info('连接状态变更: 已连接');
+                this.logger.info('组播连接状态变更: 已连接');
                 this.updateStatusBarWidget();
                 this.editorStateManager.sendCurrentState(this.eventListenerManager.isActiveWindow());
             },
             onDisconnected: () => {
-                this.logger.info('连接状态变更: 已断开');
+                this.logger.info('组播连接状态变更: 已断开');
                 this.updateStatusBarWidget();
             },
             onReconnecting: () => {
-                this.logger.info('连接状态变更: 重连中');
+                this.logger.info('组播连接状态变更: 正在重连');
                 this.updateStatusBarWidget();
             }
         };
 
-        this.webSocketManager.setConnectionCallback(connectionCallback);
+        this.multicastManager.setConnectionCallback(connectionCallback);
 
         // 状态变化回调
         this.editorStateManager.setStateChangeCallback((state: EditorState) => {
@@ -98,8 +98,8 @@ export class VSCodeJetBrainsSync {
      * 更新状态栏显示
      */
     private updateStatusBarWidget() {
-        const autoReconnect = this.webSocketManager.isAutoReconnect();
-        const connectionState = this.webSocketManager.getConnectionState()
+        const autoReconnect = this.multicastManager.isAutoReconnect();
+        const connectionState = this.multicastManager.getConnectionState()
 
         // 参考Kotlin实现的图标状态逻辑
         const icon = (() => {
@@ -134,7 +134,7 @@ export class VSCodeJetBrainsSync {
      * 切换自动重连状态
      */
     public toggleAutoReconnect() {
-        this.webSocketManager.toggleAutoReconnect();
+        this.multicastManager.toggleAutoReconnect();
         this.updateStatusBarWidget();
     }
 
@@ -146,7 +146,7 @@ export class VSCodeJetBrainsSync {
         this.logger.info('开始清理VSCode同步服务资源（重构版）');
 
         this.operationQueueProcessor.dispose();
-        this.webSocketManager.dispose();
+        this.multicastManager.dispose();
         this.eventListenerManager.dispose();
         this.editorStateManager.dispose();
         this.statusBarItem.dispose();
