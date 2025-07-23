@@ -1,6 +1,6 @@
 import {ActionType, EditorState} from './Type';
 import {Logger} from './Logger';
-import {WebSocketServerManager} from './WebSocketServerManager';
+import {MulticastManager} from './MulticastManager';
 import {MessageProcessor} from "./MessageProcessor";
 
 /**
@@ -11,7 +11,7 @@ import {MessageProcessor} from "./MessageProcessor";
 export class OperationQueueProcessor {
     private messageProcessor: MessageProcessor;
     private logger: Logger;
-    private webSocketManager: WebSocketServerManager;
+    private multicastManager: MulticastManager;
     private processingInterval: NodeJS.Timeout | null = null;
 
     // 内部队列管理
@@ -24,11 +24,11 @@ export class OperationQueueProcessor {
     constructor(
         messageProcessor: MessageProcessor,
         logger: Logger,
-        webSocketManager: WebSocketServerManager,
+        multicastManager: MulticastManager,
     ) {
         this.messageProcessor = messageProcessor;
         this.logger = logger;
-        this.webSocketManager = webSocketManager;
+        this.multicastManager = multicastManager;
 
         // 在构造函数中自动启动队列处理器
         this.start();
@@ -103,11 +103,11 @@ export class OperationQueueProcessor {
         if (!message) {
             return;
         }
-        const success = this.webSocketManager.sendMessage(message);
+        const success = this.multicastManager.sendMessage(message);
         if (success) {
-            this.logger.info(`✅ 发送消息Idea：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}`)
+            this.logger.info(`✅ 发送组播消息：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}`)
         } else {
-            this.logger.info(`❌ 发送消息Idea：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}`)
+            this.logger.info(`❌ 发送组播消息失败：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}`)
         }
     }
 

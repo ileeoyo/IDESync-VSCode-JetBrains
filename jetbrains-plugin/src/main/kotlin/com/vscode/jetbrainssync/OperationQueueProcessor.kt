@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class OperationQueueProcessor(
     private val messageProcessor: MessageProcessor,
-    private val webSocketManager: WebSocketConnectionManager,
+    private val multicastManager: MulticastManager,
 ) {
     private val log: Logger = Logger.getInstance(OperationQueueProcessor::class.java)
 
@@ -100,11 +100,11 @@ class OperationQueueProcessor(
         if (message.isEmpty()) {
             return
         }
-        val success = webSocketManager.sendMessage(message)
+        val success = multicastManager.sendMessage(message)
         if (success) {
-            log.info("✅ 发送消息VSCode：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}")
+            log.info("✅ 发送组播消息：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}")
         } else {
-            log.info("❌ 发送消息VSCode：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}")
+            log.info("❌ 发送组播消息失败：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}")
         }
     }
 
