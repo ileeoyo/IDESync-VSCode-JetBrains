@@ -1,9 +1,9 @@
 {
   "name": "vscode-jetbrains-sync",
   "displayName": "IDE Sync - Connect to JetBrains IDE",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "publisher": "denisbalber",
-  "description": "VSCode extension for synchronizing with JetBrains IDE",
+  "description": "Multi-IDE synchronization extension with UDP multicast support for VSCode, Cursor, Windsurf and JetBrains IDEs",
   "icon": "icon.png",
   "sponsor": {
     "url": "https://ko-fi.com/denisbalber"

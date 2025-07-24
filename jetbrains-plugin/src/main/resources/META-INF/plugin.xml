@@ -3,12 +3,17 @@
     <name>IDE Sync - Connect to VSCode</name>
     <vendor>denisbalber</vendor>
     <description><![CDATA[
-        <h2>IDE Sync - VSCode-JetBrains Sync</h2>
-        <p>Synchronizes a JetBrains IDE with a Visual Studio Code IDE, enabling seamless navigation between both editors. </p>
-        <p>This synchronization system is suitable for VSCode, VSCode forks like Cursor or Windsurf as well as JetBrains IntelliJ-based IDEs like Rider, IntelliJ IDEA, and WebStorm.</p>
+        <h2>IDE Sync - Multi-IDE Real-time Synchronization</h2>
+        <p>Advanced multi-IDE synchronization plugin using UDP multicast technology for seamless navigation between multiple editors simultaneously. </p>
+        <p>Supports real-time synchronization across VSCode, Cursor, Windsurf, and JetBrains IntelliJ-based IDEs like Rider, IntelliJ IDEA, and WebStorm running on the same machine.</p>
 
         <h3>Features</h3>
         <ul>
+            <li>**UDP组播同步**：去中心化发布订阅模式，无需中央服务器</li>
+            <li>**多IDE实例支持**：同时同步多个编辑器实例</li>
+            <li>**自动消息去重**：内置去重和清理机制确保稳定性</li>
+            <li>**动态端口配置**：支持创建独立同步组，实时生效</li>
+            <li>**优化通信**：本机同步优先使用回环接口</li>
             <li>Automatic cursor position synchronization</li>
             <li>Automatic active file synchronization</li>
             <li>Easy configuration through settings</li>
@@ -55,6 +60,15 @@
     ]]></description>
     <depends>com.intellij.modules.platform</depends>
     <change-notes><![CDATA[
+        <h3>Version 1.0.20</h3>
+        <ul>
+            <li>同步机制升级：将WebSocket同步更换为UDP组播同步，实现去中心化发布订阅模式</li>
+            <li>多编辑器支持：本机同时打开的IDEA、Cursor、Windsurf、VSCode等多IDE实例可实时同步</li>
+            <li>稳定性保障：自带自动消息去重和清理机制</li>
+            <li>动态端口配置：支持通过端口创建独立同步组，分组间互不干扰</li>
+            <li>即改即用：端口配置实时生效，无需重启IDE</li>
+            <li>通信优化：本机同步优先使用回环接口，提升效率</li>
+        </ul>
         <h3>Version 1.0.19</h3>
         <ul>
             <li>Added file close synchronization between VSCode and JetBrains</li>
