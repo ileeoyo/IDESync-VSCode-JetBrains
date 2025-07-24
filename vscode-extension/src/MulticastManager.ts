@@ -136,7 +136,7 @@ export class MulticastManager {
             // 清理现有连接
             this.cleanUp();
 
-            // 创建UDP套接字
+            // 创建UDP套接字，优先绑定到回环地址
             this.socket = dgram.createSocket({
                 type: 'udp4',
                 reuseAddr: true
@@ -157,20 +157,40 @@ export class MulticastManager {
                 this.logger.info(`组播套接字正在监听 ${address.address}:${address.port}`);
 
                 try {
-                    // 加入组播组
-                    this.socket!.addMembership(this.multicastAddress);
+                    // 加入组播组，使用本地链路地址确保仅本机通信
+                    this.socket!.addMembership(this.multicastAddress, '127.0.0.1');
                     this.setConnectionState(ConnectionState.CONNECTED);
                     this.logger.info(`成功加入组播组: ${this.multicastAddress}:${this.multicastPort}`);
                 } catch (error) {
-                    this.logger.warn('加入组播组失败:', error as Error);
-                    this.handleConnectionError();
+                    this.logger.warn('加入组播组失败，尝试不指定接口:', error as Error);
+                    try {
+                        // 如果指定接口失败，尝试不指定接口
+                        this.socket!.addMembership(this.multicastAddress);
+                        this.setConnectionState(ConnectionState.CONNECTED);
+                        this.logger.info(`成功加入组播组（不指定接口）: ${this.multicastAddress}:${this.multicastPort}`);
+                    } catch (secondError) {
+                        this.logger.warn('加入组播组完全失败:', secondError as Error);
+                        this.handleConnectionError();
+                    }
                 }
             });
 
-            // 绑定到组播端口
-            this.socket.bind(this.multicastPort, () => {
-                this.logger.info(`绑定到端口 ${this.multicastPort}`);
-            });
+            // 尝试绑定到回环地址，失败则回退到不指定地址
+            try {
+                this.socket.bind(this.multicastPort, '127.0.0.1', () => {
+                    this.logger.info(`绑定到回环地址端口: 127.0.0.1:${this.multicastPort}`);
+                });
+            } catch (bindError) {
+                this.logger.warn('绑定到回环地址失败，尝试不指定地址:', bindError as Error);
+                try {
+                    this.socket.bind(this.multicastPort, () => {
+                        this.logger.info(`绑定到端口（不指定地址）: ${this.multicastPort}`);
+                    });
+                } catch (secondBindError) {
+                    this.logger.warn('绑定端口完全失败:', secondBindError as Error);
+                    this.handleConnectionError();
+                }
+            }
 
         } catch (error) {
             this.logger.warn('创建组播连接失败:', error as Error);

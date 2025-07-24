@@ -191,22 +191,39 @@ class MulticastManager(
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
 
-            // 优先选择非回环、活跃的接口
+            // 优先使用回环接口，确保仅本机通信
+            for (netInterface in interfaces) {
+                if (netInterface.isLoopback &&
+                    netInterface.isUp &&
+                    netInterface.supportsMulticast()
+                ) {
+                    log.info("使用回环网络接口: ${netInterface.displayName}")
+                    return netInterface
+                }
+            }
+
+            // 如果回环接口不可用，尝试使用本地链路接口作为备选
+            log.warn("回环接口不可用，尝试使用本地链路接口")
             for (netInterface in interfaces) {
                 if (!netInterface.isLoopback &&
                     netInterface.isUp &&
                     netInterface.supportsMulticast() &&
                     netInterface.inetAddresses.hasMoreElements()
                 ) {
-
-                    log.info("找到合适的网络接口: ${netInterface.displayName}")
-                    return netInterface
+                    // 检查是否为本地链路地址
+                    val addresses = netInterface.inetAddresses
+                    while (addresses.hasMoreElements()) {
+                        val address = addresses.nextElement()
+                        if (address.isSiteLocalAddress || address.isLinkLocalAddress) {
+                            log.info("使用本地链路网络接口: ${netInterface.displayName}")
+                            return netInterface
+                        }
+                    }
                 }
             }
 
-            // 如果没有找到合适的接口，使用默认接口
-            log.warn("未找到理想的网络接口，尝试使用默认接口")
-            return NetworkInterface.getNetworkInterfaces().nextElement()
+            log.error("未找到可用的网络接口")
+            return null
 
         } catch (e: Exception) {
             log.warn("查找网络接口时发生错误: ${e.message}", e)
