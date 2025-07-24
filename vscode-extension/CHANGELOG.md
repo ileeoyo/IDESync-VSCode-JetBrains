@@ -1,5 +1,13 @@
 # Change Log
 
+## [1.0.20]
+- **同步机制升级**：将WebSocket同步更换为UDP组播同步，实现去中心化发布订阅模式
+- **多编辑器支持**：本机同时打开的IDEA、Cursor、Windsurf、VSCode等多IDE实例可实时同步
+- **稳定性保障**：自带自动消息去重和清理机制
+- **动态端口配置**：支持通过端口创建独立同步组，分组间互不干扰
+- **即改即用**：端口配置实时生效，无需重启IDE
+- **通信优化**：本机同步优先使用回环接口，提升效率
+
 ## [1.0.19]
 - Added file close synchronization between VSCode and JetBrains
 

@@ -25,9 +25,9 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     private val editorStateManager = EditorStateManager(project)
     private val fileOperationHandler = FileOperationHandler(project)
     private val messageProcessor = MessageProcessor(fileOperationHandler)
-    private val webSocketManager = WebSocketConnectionManager(project, messageProcessor)
+    private val multicastManager = MulticastManager(project, messageProcessor)
     private val eventListenerManager = EventListenerManager(project, editorStateManager)
-    private val operationQueueProcessor = OperationQueueProcessor(messageProcessor, webSocketManager)
+    private val operationQueueProcessor = OperationQueueProcessor(messageProcessor, multicastManager)
 
 
     init {
@@ -60,20 +60,20 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
      */
     private fun setupComponentCallbacks() {
         // 连接状态变化回调
-        webSocketManager.setConnectionCallback(object : ConnectionCallback {
+        multicastManager.setConnectionCallback(object : ConnectionCallback {
             override fun onConnected() {
-                log.info("连接状态变更: 已连接");
+                log.info("组播连接状态变更: 已连接");
                 updateStatusBarWidget()
                 editorStateManager.sendCurrentState(eventListenerManager.isActiveWindow())
             }
 
             override fun onDisconnected() {
-                log.info("连接状态变更: 已断开");
+                log.info("组播连接状态变更: 已断开");
                 updateStatusBarWidget()
             }
 
             override fun onReconnecting() {
-                log.info("连接状态变更: 正在重连");
+                log.info("组播连接状态变更: 正在重连");
                 updateStatusBarWidget()
             }
         })
@@ -101,25 +101,30 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
 
 
     /**
-     * 切换自动重连状态
+     * 切换组播同步状态
      */
     fun toggleAutoReconnect() {
-        webSocketManager.toggleAutoReconnect()
+        multicastManager.toggleAutoReconnect()
         updateStatusBarWidget()
     }
 
     // 公共接口方法（委托给各个模块）
 
-    fun isConnected(): Boolean = webSocketManager.isConnected()
-    fun isAutoReconnect(): Boolean = webSocketManager.isAutoReconnect()
-    fun isConnecting(): Boolean = webSocketManager.isConnecting()
-    fun isDisconnected(): Boolean = webSocketManager.isDisconnected()
+    fun isConnected(): Boolean = multicastManager.isConnected()
+    fun isAutoReconnect(): Boolean = multicastManager.isAutoReconnect()
+    fun isConnecting(): Boolean = multicastManager.isConnecting()
+    fun isDisconnected(): Boolean = multicastManager.isDisconnected()
 
     /**
-     * 重启连接
+     * 重启连接（WebSocket和组播）
      */
-    fun restartConnection() {
-        webSocketManager.restartConnection()
+    fun updateMulticastPort() {
+        log.info("重启所有连接（WebSocket和组播）")
+        
+        // 更新组播端口配置
+        multicastManager.updateMulticastPort()
+        
+        updateStatusBarWidget()
     }
 
 
@@ -131,7 +136,7 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
 
         // 按顺序清理各个组件
         operationQueueProcessor.dispose()
-        webSocketManager.dispose()
+        multicastManager.dispose()
         editorStateManager.dispose()
         eventListenerManager.dispose()
 

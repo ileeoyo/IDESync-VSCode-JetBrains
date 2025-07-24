@@ -42,10 +42,10 @@ class MessageProcessor(
      * 验证消息有效性
      */
     private fun isValidMessage(state: EditorState): Boolean {
-        // 忽略来自自己的消息
-        if (state.source == SourceType.JETBRAINS) {
-            return false
-        }
+//        // 忽略来自自己的消息
+//        if (state.source == SourceType.JETBRAINS) {
+//            return false
+//        }
 
         // 只处理来自活跃IDE的消息
         if (!state.isActive) {

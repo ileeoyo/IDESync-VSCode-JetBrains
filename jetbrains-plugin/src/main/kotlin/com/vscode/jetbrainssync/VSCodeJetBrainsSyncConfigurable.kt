@@ -16,8 +16,8 @@ class VSCodeJetBrainsSyncConfigurable(private val project: Project) : Configurab
     override fun getDisplayName(): String = "IDE Sync - Connect to VSCode"
 
     override fun createComponent(): JComponent {
-        val model = SpinnerNumberModel(settings.state.port, 1000, 65535, 1)
-        portSpinner = JSpinner(model)
+        val portModel = SpinnerNumberModel(settings.state.port, 1000, 65535, 1)
+        portSpinner = JSpinner(portModel)
         
         // Configure spinner to not use thousand separators
         val editor = portSpinner?.editor as? JSpinner.NumberEditor
@@ -31,7 +31,7 @@ class VSCodeJetBrainsSyncConfigurable(private val project: Project) : Configurab
         panel.layout = BoxLayout(panel, BoxLayout.Y_AXIS)
         
         // Add description label
-        val descriptionLabel = JLabel("Configure the WebSocket port for synchronization with VSCode.")
+        val descriptionLabel = JLabel("Configure the port for synchronization with VSCode (use different ports to create separate sync groups).")
         descriptionLabel.alignmentX = Component.LEFT_ALIGNMENT
         panel.add(descriptionLabel)
         panel.add(Box.createVerticalStrut(10))
@@ -58,7 +58,7 @@ class VSCodeJetBrainsSyncConfigurable(private val project: Project) : Configurab
 
     override fun apply() {
         settings.state.port = portSpinner?.value as? Int ?: 3000
-        project.service<VSCodeJetBrainsSyncService>().restartConnection()
+        project.service<VSCodeJetBrainsSyncService>().updateMulticastPort()
     }
 
     override fun reset() {
