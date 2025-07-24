@@ -21,7 +21,7 @@ class MulticastManager(
     private val log: Logger = Logger.getInstance(MulticastManager::class.java)
 
     // 组播配置
-    private val multicastAddress = "224.0.0.100" // 组播地址
+    private val multicastAddress = "224.0.0.1" // 本地链路组播地址，仅本机通信
     private var multicastPort: Int // 组播端口（从配置读取）
     private val maxMessageSize = 8192 // 最大消息大小（8KB）
 
