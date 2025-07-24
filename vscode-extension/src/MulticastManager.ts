@@ -6,61 +6,72 @@ import {Logger} from './Logger';
 import {MessageProcessor} from './MessageProcessor';
 
 /**
+ * 消息包装器接口
+ */
+interface MessageWrapper {
+    messageId: string;
+    senderId: string;
+    timestamp: number;
+    payload: string;
+}
+
+/**
  * 组播管理器
  * 负责UDP组播消息的发送和接收，实现去中心化的编辑器同步
  */
 export class MulticastManager {
-    private logger: Logger;
-    private messageProcessor: MessageProcessor;
+    // === 核心依赖 ===
+    private readonly logger: Logger;
+    private readonly messageProcessor: MessageProcessor;
 
-    // 组播配置
+    // === 网络配置 ===
     private readonly multicastAddress = '224.0.0.1'; // 本地链路组播地址，仅本机通信
     private multicastPort: number; // 组播端口（从配置读取）
     private readonly maxMessageSize = 8192; // 最大消息大小（8KB）
 
-    // 网络组件
+    // === 连接状态 ===
     private socket: dgram.Socket | null = null;
-
-    // 状态管理
     private connectionState: ConnectionState = ConnectionState.DISCONNECTED;
     private autoReconnect = false;
     private connectionCallback: ConnectionCallback | null = null;
+    private isShutdown = false;
 
-    // 消息管理
+    // === 消息管理 ===
     private messageSequence = 0;
     private receivedMessages = new Map<string, number>(); // 消息去重
-    private readonly maxReceivedMessagesSize = 1000; // 最大缓存消息数量
-    private readonly messageTimeoutMs = 30000; // 消息超时时间（30秒）
+    private readonly maxReceivedMessagesSize = 500; // 最大缓存消息数量
+    private readonly messageTimeoutMs = 15000; // 消息超时时间（30秒）
 
-    // 定时器管理
+    // === 定时器 ===
     private reconnectTimer: NodeJS.Timeout | null = null;
     private cleanupTimer: NodeJS.Timeout | null = null;
 
-    // 本机标识
+    // === 本机标识 ===
     private readonly localIdentifier: string;
-
-    // 状态标志
-    private isShutdown = false;
 
     constructor(logger: Logger, messageProcessor: MessageProcessor) {
         this.logger = logger;
         this.messageProcessor = messageProcessor;
         this.localIdentifier = this.generateLocalIdentifier();
-
-        // 从配置中读取组播端口（复用WebSocket端口配置）
         this.multicastPort = vscode.workspace.getConfiguration('vscode-jetbrains-sync').get('port', 3000);
 
         this.logger.info(`初始化组播管理器 - 地址: ${this.multicastAddress}:${this.multicastPort}`);
 
-        // 监听配置变更
+        this.setupConfigurationListener();
+        this.startMessageCleanupTask();
+    }
+
+    // ==================== 初始化相关方法 ====================
+
+    /**
+     * 设置配置监听器
+     */
+    private setupConfigurationListener(): void {
         vscode.workspace.onDidChangeConfiguration((event) => {
             if (event.affectsConfiguration('vscode-jetbrains-sync.port')) {
                 this.updateMulticastPort();
             }
         });
-
-        // 启动消息清理定时任务
-        this.startMessageCleanupTask();
     }
 
     /**
@@ -86,12 +97,24 @@ export class MulticastManager {
             this.logger.info(`组播端口配置变更: ${this.multicastPort} -> ${newPort}`);
             this.multicastPort = newPort;
 
-            // 如果当前已启用自动重连，则重启连接
             if (this.autoReconnect) {
                 this.restartConnection();
             }
         }
     }
+
+    /**
+     * 启动消息清理定时任务
+     */
+    private startMessageCleanupTask(): void {
+        this.cleanupTimer = setInterval(() => {
+            if (!this.isShutdown) {
+                this.cleanupOldMessages();
+            }
+        }, 60000); // 每分钟清理一次
+    }
+
+    // ==================== 公共接口方法 ====================
 
     /**
      * 设置连接状态回调
@@ -117,15 +140,26 @@ export class MulticastManager {
     }
 
     /**
+     * 重启连接
+     */
+    restartConnection(): void {
+        this.logger.info('手动重启组播连接');
+        this.disconnectAndCleanup();
+        if (this.autoReconnect) {
+            this.connectMulticast();
+        }
+    }
+
+    // ==================== 连接管理方法 ====================
+
+    /**
      * 连接组播组
      */
     private connectMulticast(): void {
-        if (this.isShutdown) {
-            return;
-        }
-
-        if (this.connectionState !== ConnectionState.DISCONNECTED) {
-            this.logger.info('连接状态不是DISCONNECTED，跳过连接尝试');
+        if (this.isShutdown || !this.autoReconnect || this.connectionState !== ConnectionState.DISCONNECTED) {
+            if (this.connectionState !== ConnectionState.DISCONNECTED) {
+                this.logger.info('连接状态不是DISCONNECTED，跳过连接尝试');
+            }
             return;
         }
 
@@ -133,72 +167,128 @@ export class MulticastManager {
         this.logger.info('正在连接组播组...');
 
         try {
-            // 清理现有连接
             this.cleanUp();
-
-            // 创建UDP套接字，优先绑定到回环地址
-            this.socket = dgram.createSocket({
-                type: 'udp4',
-                reuseAddr: true
-            });
-
-            // 设置套接字选项
-            this.socket.on('error', (error: Error) => {
-                this.logger.warn('组播套接字错误:', error);
-                this.handleConnectionError();
-            });
-
-            this.socket.on('message', (message: Buffer, rinfo: dgram.RemoteInfo) => {
-                this.handleReceivedMessage(message.toString('utf8'));
-            });
-
-            this.socket.on('listening', () => {
-                const address = this.socket!.address();
-                const isLoopback = address.address === '127.0.0.1' || address.address === '::1';
-                const addressType = isLoopback ? '回环地址' : '非回环地址';
-                this.logger.info(`组播套接字正在监听 ${addressType} ${address.address}:${address.port}`);
-
-                try {
-                    // 加入组播组，使用本地链路地址确保仅本机通信
-                    this.socket!.addMembership(this.multicastAddress, '127.0.0.1');
-                    this.setConnectionState(ConnectionState.CONNECTED);
-                    this.logger.info(`成功加入组播组（回环接口）: ${this.multicastAddress}:${this.multicastPort}`);
-                } catch (error) {
-                    this.logger.warn('加入组播组（回环接口）失败，尝试不指定接口:', error as Error);
-                    try {
-                        // 如果指定接口失败，尝试不指定接口
-                        this.socket!.addMembership(this.multicastAddress);
-                        this.setConnectionState(ConnectionState.CONNECTED);
-                        this.logger.info(`成功加入组播组（默认接口）: ${this.multicastAddress}:${this.multicastPort}`);
-                    } catch (secondError) {
-                        this.logger.warn('加入组播组完全失败:', secondError as Error);
-                        this.handleConnectionError();
-                    }
-                }
-            });
-
-            // 尝试绑定到回环地址，失败则回退到不指定地址
-            try {
-                this.socket.bind(this.multicastPort, '127.0.0.1', () => {
-                    this.logger.info(`绑定到回环地址端口: 127.0.0.1:${this.multicastPort}`);
-                });
-            } catch (bindError) {
-                this.logger.warn('绑定到回环地址失败，尝试绑定到默认地址:', bindError as Error);
-                try {
-                    this.socket.bind(this.multicastPort, () => {
-                        this.logger.info(`绑定到默认地址端口: ${this.multicastPort}`);
-                    });
-                } catch (secondBindError) {
-                    this.logger.warn('绑定端口完全失败:', secondBindError as Error);
-                    this.handleConnectionError();
-                }
-            }
-
+            this.createSocket();
+            this.bindSocket();
         } catch (error) {
             this.logger.warn('创建组播连接失败:', error as Error);
             this.handleConnectionError();
         }
     }
+
+    /**
+     * 创建UDP套接字
+     */
+    private createSocket(): void {
+        this.socket = dgram.createSocket({
+            type: 'udp4',
+            reuseAddr: true
+        });
+
+        this.setupSocketEventHandlers();
+    }
+
+    /**
+     * 设置套接字事件处理器
+     */
+    private setupSocketEventHandlers(): void {
+        if (!this.socket) return;
+
+        this.socket.on('error', (error: Error) => {
+            this.logger.warn('组播套接字错误:', error);
+            this.handleConnectionError();
+        });
+
+        this.socket.on('message', (message: Buffer, rinfo: dgram.RemoteInfo) => {
+            this.handleReceivedMessage(message.toString('utf8'));
+        });
+
+        this.socket.on('listening', () => {
+            this.handleSocketListening();
+        });
+    }
+
+    /**
+     * 处理套接字监听事件
+     */
+    private handleSocketListening(): void {
+        if (!this.socket) return;
+
+        const address = this.socket.address();
+        const isLoopback = address.address === '127.0.0.1' || address.address === '::1';
+        const addressType = isLoopback ? '回环地址' : '非回环地址';
+        this.logger.info(`组播套接字正在监听 ${addressType} ${address.address}:${address.port}`);
+
+        this.joinMulticastGroup();
+    }
+
+    /**
+     * 加入组播组
+     */
+    private joinMulticastGroup(): void {
+        if (!this.socket) return;
+
+        try {
+            // 优先使用回环接口
+            this.socket.addMembership(this.multicastAddress, '127.0.0.1');
+            this.setConnectionState(ConnectionState.CONNECTED);
+            this.logger.info(`成功加入组播组（回环接口）: ${this.multicastAddress}:${this.multicastPort}`);
+        } catch (error) {
+            this.logger.warn('加入组播组（回环接口）失败，尝试不指定接口:', error as Error);
+            this.tryJoinWithDefaultInterface();
+        }
+    }
+
+    /**
+     * 尝试使用默认接口加入组播组
+     */
+    private tryJoinWithDefaultInterface(): void {
+        if (!this.socket) return;
+
+        try {
+            this.socket.addMembership(this.multicastAddress);
+            this.setConnectionState(ConnectionState.CONNECTED);
+            this.logger.info(`成功加入组播组（默认接口）: ${this.multicastAddress}:${this.multicastPort}`);
+        } catch (error) {
+            this.logger.warn('加入组播组完全失败:', error as Error);
+            this.handleConnectionError();
+        }
+    }
+
+    /**
+     * 绑定套接字到端口
+     */
+    private bindSocket(): void {
+        if (!this.socket) return;
+
+        try {
+            // 优先绑定到回环地址
+            this.socket.bind(this.multicastPort, '127.0.0.1', () => {
+                this.logger.info(`绑定到回环地址端口: 127.0.0.1:${this.multicastPort}`);
+            });
+        } catch (bindError) {
+            this.logger.warn('绑定到回环地址失败，尝试绑定到默认地址:', bindError as Error);
+            this.tryBindToDefaultAddress();
+        }
+    }
+
+    /**
+     * 尝试绑定到默认地址
+     */
+    private tryBindToDefaultAddress(): void {
+        if (!this.socket) return;
+
+        try {
+            this.socket.bind(this.multicastPort, () => {
+                this.logger.info(`绑定到默认地址端口: ${this.multicastPort}`);
+            });
+        } catch (error) {
+            this.logger.warn('绑定端口完全失败:', error as Error);
+            this.handleConnectionError();
+        }
+    }
+
+    // ==================== 消息处理方法 ====================
 
     /**
      * 处理接收到的消息
@@ -207,41 +297,73 @@ export class MulticastManager {
         try {
             this.logger.info(`收到组播消息: ${message}`);
 
-            // 解析消息以检查发送者
             const messageData = this.parseMessageData(message);
+            if (!messageData) return;
 
             // 检查是否是自己发送的消息
-            if (messageData?.senderId === this.localIdentifier) {
+            if (this.isOwnMessage(messageData)) {
                 this.logger.debug('忽略自己发送的消息');
                 return;
             }
 
-            // 检查消息是否已经处理过（去重）
-            const messageId = messageData?.messageId;
-            if (messageId) {
-                const currentTime = Date.now();
-                if (this.receivedMessages.has(messageId)) {
-                    this.logger.debug(`忽略重复消息: ${messageId}`);
-                    return;
-                }
-
-                // 记录消息ID
-                this.receivedMessages.set(messageId, currentTime);
-
-                // 限制缓存大小
-                if (this.receivedMessages.size > this.maxReceivedMessagesSize) {
-                    this.cleanupOldMessages();
-                }
+            // 检查消息去重
+            if (this.isDuplicateMessage(messageData)) {
+                this.logger.debug(`忽略重复消息: ${messageData.messageId}`);
+                return;
             }
 
-            // 提取实际的编辑器状态消息
-            const editorStateMessage = messageData?.payload;
-            if (editorStateMessage) {
-                this.messageProcessor.handleIncomingMessage(editorStateMessage);
-            }
+            // 记录消息并处理
+            this.recordMessage(messageData);
+            this.processMessage(messageData);
 
         } catch (error) {
             this.logger.warn('处理接收到的消息时发生错误:', error as Error);
+        }
+    }
+
+    /**
+     * 检查是否是自己发送的消息
+     */
+    private isOwnMessage(messageData: MessageWrapper): boolean {
+        return messageData.senderId === this.localIdentifier;
+    }
+
+    /**
+     * 检查是否是重复消息
+     */
+    private isDuplicateMessage(messageData: MessageWrapper): boolean {
+        return this.receivedMessages.has(messageData.messageId);
+    }
+
+    /**
+     * 记录消息ID
+     */
+    private recordMessage(messageData: MessageWrapper): void {
+        this.receivedMessages.set(messageData.messageId, Date.now());
+
+        if (this.receivedMessages.size > this.maxReceivedMessagesSize) {
+            this.cleanupOldMessages();
+        }
+    }
+
+    /**
+     * 处理消息内容
+     */
+    private processMessage(messageData: MessageWrapper): void {
+        if (messageData.payload) {
+            this.messageProcessor.handleIncomingMessage(messageData.payload);
+        }
+    }
+
+    /**
+     * 解析消息数据
+     */
+    private parseMessageData(message: string): MessageWrapper | null {
+        try {
+            return JSON.parse(message) as MessageWrapper;
+        } catch (error) {
+            this.logger.warn('解析消息包装器失败:', error as Error);
+            return null;
         }
     }
 
@@ -312,18 +434,6 @@ export class MulticastManager {
     }
 
     /**
-     * 解析消息数据
-     */
-    private parseMessageData(message: string): MessageWrapper | null {
-        try {
-            return JSON.parse(message) as MessageWrapper;
-        } catch (error) {
-            this.logger.warn('解析消息包装器失败:', error as Error);
-            return null;
-        }
-    }
-
-    /**
      * 清理过期消息
      */
     private cleanupOldMessages(): void {
@@ -338,16 +448,7 @@ export class MulticastManager {
         this.logger.debug(`清理过期消息，当前缓存消息数: ${this.receivedMessages.size}`);
     }
 
-    /**
-     * 启动消息清理定时任务
-     */
-    private startMessageCleanupTask(): void {
-        this.cleanupTimer = setInterval(() => {
-            if (!this.isShutdown) {
-                this.cleanupOldMessages();
-            }
-        }, 60000); // 每分钟清理一次
-    }
+    // ==================== 状态管理方法 ====================
 
     /**
      * 处理连接错误
@@ -400,6 +501,8 @@ export class MulticastManager {
         }
     }
 
+    // ==================== 资源清理方法 ====================
+
     /**
      * 断开连接并清理资源
      */
@@ -435,38 +538,6 @@ export class MulticastManager {
     }
 
     /**
-     * 重启连接
-     */
-    restartConnection(): void {
-        this.logger.info('手动重启组播连接');
-        this.disconnectAndCleanup();
-        if (this.autoReconnect) {
-            this.connectMulticast();
-        }
-    }
-
-    // 状态查询方法
-    isConnected(): boolean {
-        return this.connectionState === ConnectionState.CONNECTED;
-    }
-
-    isAutoReconnect(): boolean {
-        return this.autoReconnect;
-    }
-
-    isConnecting(): boolean {
-        return this.connectionState === ConnectionState.CONNECTING;
-    }
-
-    isDisconnected(): boolean {
-        return this.connectionState === ConnectionState.DISCONNECTED;
-    }
-
-    getConnectionState(): ConnectionState {
-        return this.connectionState;
-    }
-
-    /**
      * 清理资源
      */
     dispose(): void {
@@ -489,14 +560,26 @@ export class MulticastManager {
 
         this.logger.info('组播管理器资源清理完成');
     }
-}
 
-/**
- * 消息包装器接口
- */
-interface MessageWrapper {
-    messageId: string;
-    senderId: string;
-    timestamp: number;
-    payload: string;
+    // ==================== 状态查询方法 ====================
+
+    isConnected(): boolean {
+        return this.connectionState === ConnectionState.CONNECTED;
+    }
+
+    isAutoReconnect(): boolean {
+        return this.autoReconnect;
+    }
+
+    isConnecting(): boolean {
+        return this.connectionState === ConnectionState.CONNECTING;
+    }
+
+    isDisconnected(): boolean {
+        return this.connectionState === ConnectionState.DISCONNECTED;
+    }
+
+    getConnectionState(): ConnectionState {
+        return this.connectionState;
+    }
 } 
