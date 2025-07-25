@@ -2,6 +2,8 @@
 
 >**Note:** This synchronization system is suitable for VSCode, VSCode forks like Cursor or Windsurf as well as JetBrains IntelliJ-based IDEs like Rider, IntelliJ IDEA and WebStorm.
 
+![IDE Sync Demo](20250724.gif)
+
 A **decentralized synchronization system** based on **multicast technology** that enables seamless real-time synchronization between multiple VSCode and JetBrains IDE instances simultaneously. No central server required - all IDEs communicate directly with each other in a peer-to-peer fashion.
 
 ## Key Features
