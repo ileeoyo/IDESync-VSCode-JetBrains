@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import {ActionType, EditorState} from './Type';
+import {ActionType, EditorState, SourceType} from './Type';
 import {Logger} from './Logger';
+import {EventListenerManager} from './EventListenerManager';
 
 /**
  * 文件操作处理器
@@ -9,9 +10,11 @@ import {Logger} from './Logger';
  */
 export class FileOperationHandler {
     private logger: Logger;
+    private eventListenerManager: EventListenerManager;
 
-    constructor(logger: Logger) {
+    constructor(logger: Logger, eventListenerManager: EventListenerManager) {
         this.logger = logger;
+        this.eventListenerManager = eventListenerManager;
     }
 
 
@@ -19,6 +22,8 @@ export class FileOperationHandler {
         try {
             if (state.action === ActionType.CLOSE) {
                 return this.handleFileClose(state);
+            } else if (state.action === ActionType.WORKSPACE_SYNC) {
+                return this.handleWorkspaceSync(state);
             } else {
                 return this.handleFileOpenOrNavigate(state);
             }
@@ -32,31 +37,64 @@ export class FileOperationHandler {
      * 处理文件关闭操作
      */
     async handleFileClose(state: EditorState): Promise<void> {
-        this.logger.info(`准备关闭文件: ${state.filePath}`);
-        // 使用EditorState的平台兼容路径
-        const compatiblePath = state.getCompatiblePath()
+        this.logger.info(`进行文件关闭操作: ${state.filePath}`);
+        const compatiblePath = state.getCompatiblePath();
+        await this.closeFileByPath(compatiblePath);
+    }
+
+    /**
+     * 处理工作区同步操作
+     */
+    async handleWorkspaceSync(state: EditorState): Promise<void> {
+        this.logger.info(`进行工作区同步操作：目标文件数量: ${state.openedFiles?.length || 0}`);
+
+        if (!state.openedFiles || state.openedFiles.length === 0) {
+            this.logger.info('工作区同步消息中没有打开的文件，跳过处理');
+            return;
+        }
+
         try {
-            const documents = vscode.workspace.textDocuments;
-            const editorToClose = documents.find(doc => {
-                return compatiblePath === doc.uri.fsPath;
+            // 如果当前编辑器活跃，保存当前编辑器状态
+            let savedActiveEditorState: EditorState | null = null;
+            if (this.isCurrentEditorActive()) {
+                savedActiveEditorState = this.getCurrentActiveEditorState();
+                this.logger.info(`保存当前活跃编辑器状态: ${savedActiveEditorState?.filePath}`);
+            }
+
+            // 获取当前所有打开的文件
+            const currentOpenedFiles = this.getCurrentOpenedFiles();
+            const targetFiles = state.openedFiles.map(filePath => {
+                // 创建临时EditorState以使用路径转换逻辑
+                const tempState = new EditorState(ActionType.OPEN, filePath, 0, 0);
+                return tempState.getCompatiblePath();
             });
 
-            if (editorToClose) {
-                this.logger.info(`找到目标文件，准备关闭: ${editorToClose.uri.fsPath}`);
+            this.logger.info(`当前打开文件: ${currentOpenedFiles.length}个`);
+            this.logger.info(`目标文件: ${targetFiles.length}个`);
 
-                await vscode.window.showTextDocument(editorToClose);
-                this.logger.info(`激活目标文件: ${editorToClose.uri.fsPath}`);
-
-                await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                this.logger.info(`✅ 成功关闭文件: ${editorToClose.uri.fsPath}`);
-
-            } else {
-                this.logger.warn(`❌ 无法找到要关闭的文件: ${compatiblePath}`);
-                // 尝试通过文件名匹配
-                await this.findAndCloseFileByName(compatiblePath);
+            // 关闭多余的文件（当前打开但目标中不存在的文件）
+            const filesToClose = currentOpenedFiles.filter((file: string) => !targetFiles.includes(file));
+            for (const fileToClose of filesToClose) {
+                await this.closeFileByPath(fileToClose);
             }
+
+            // 打开缺失的文件（目标中存在但当前未打开的文件）
+            const filesToOpen = targetFiles.filter((file: string) => !currentOpenedFiles.includes(file));
+            for (const fileToOpen of filesToOpen) {
+                await this.openFileByPath(fileToOpen);
+            }
+
+            // 恢复之前保存的活跃编辑器状态，或处理指定的活跃文件
+            if (savedActiveEditorState) {
+                this.logger.info(`恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}`);
+                await this.handleFileOpenOrNavigate(savedActiveEditorState);
+            } else if (state.filePath && !this.isCurrentEditorActive()) {
+                await this.handleFileOpenOrNavigate(state);
+            }
+
+            this.logger.info(`✅ 工作区同步完成`);
         } catch (error) {
-            this.logger.warn(`文档关闭失败: ${state.filePath}`, error as Error);
+            this.logger.warn('工作区同步失败:', error as Error);
         }
     }
 
@@ -65,14 +103,13 @@ export class FileOperationHandler {
      * 处理文件打开和导航操作
      */
     async handleFileOpenOrNavigate(state: EditorState): Promise<void> {
-        this.logger.info(`准备导航文件: ${state.filePath}, 行${state.line}, 列${state.column}`)
+        this.logger.info(`进行文件导航操作: ${state.filePath}, 行${state.line}, 列${state.column}`)
         try {
-            const uri = vscode.Uri.file(state.getCompatiblePath());
-            const document = await vscode.workspace.openTextDocument(uri);
-            const editor = await vscode.window.showTextDocument(document, {preview: false});
-
-            this.navigateToPosition(editor, state.line, state.column);
-            this.logger.info(`✅ 成功同步到文件: ${state.filePath}, 行${state.line}, 列${state.column}`);
+            const editor = await this.openFileByPath(state.getCompatiblePath());
+            if (editor) {
+                this.navigateToPosition(editor, state.line, state.column);
+                this.logger.info(`✅ 成功同步到文件: ${state.filePath}, 行${state.line}, 列${state.column}`);
+            }
         } catch (error) {
             this.logger.warn('处理接收状态失败:', error as Error);
         }
@@ -97,35 +134,120 @@ export class FileOperationHandler {
     }
 
     /**
-     * 通过文件名在项目中查找并关闭文件
+     * 获取当前所有打开的文件路径
      */
-    private async findAndCloseFileByName(filePath: string): Promise<void> {
+    private getCurrentOpenedFiles(): string[] {
+        const openedFiles: string[] = [];
+
+        for (const tabGroup of vscode.window.tabGroups.all) {
+            for (const tab of tabGroup.tabs) {
+                if (tab.input instanceof vscode.TabInputText) {
+                    openedFiles.push(tab.input.uri.fsPath);
+                }
+            }
+        }
+
+        return openedFiles;
+    }
+
+    /**
+     * 根据文件路径关闭文件
+     * 如果直接路径匹配失败，会尝试通过文件名匹配
+     */
+    private async closeFileByPath(filePath: string): Promise<void> {
         try {
+            this.logger.info(`准备关闭文件: ${filePath}`);
+            const documents = vscode.workspace.textDocuments;
+
+            // 首先尝试精确路径匹配
+            let editorToClose = documents.find(doc => doc.uri.fsPath === filePath);
+
+            if (editorToClose) {
+                await vscode.window.showTextDocument(editorToClose);
+                await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+                this.logger.info(`✅ 成功关闭文件: ${filePath}`);
+                return;
+            }
+
+            // 如果精确匹配失败，尝试通过文件名匹配
+            this.logger.warn(`❌ 精确路径匹配失败: ${filePath}`);
             const fileName = path.basename(filePath);
             this.logger.info(`🔍 尝试通过文件名查找: ${fileName}`);
 
-            const documents = vscode.workspace.textDocuments;
-
-            // 查找匹配的文件名
-            const matchingDocument = documents.find(doc => {
+            editorToClose = documents.find(doc => {
                 const docFileName = path.basename(doc.uri.fsPath);
                 return docFileName === fileName;
             });
 
-            if (matchingDocument) {
-                this.logger.info(`🎯 找到匹配的文件: ${matchingDocument.uri.fsPath}`);
-
-                await vscode.window.showTextDocument(matchingDocument);
-                this.logger.info(`激活匹配的文件: ${matchingDocument.uri.fsPath}`);
-
+            if (editorToClose) {
+                this.logger.info(`🎯 找到匹配的文件: ${editorToClose.uri.fsPath}`);
+                await vscode.window.showTextDocument(editorToClose);
                 await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                this.logger.info(`✅ 通过文件名匹配成功关闭文件: ${matchingDocument.uri.fsPath}`);
+                this.logger.info(`✅ 通过文件名匹配成功关闭文件: ${editorToClose.uri.fsPath}`);
             } else {
-                this.logger.warn(`❌ 未找到匹配的文件名: ${fileName}`);
+                this.logger.warn(`❌ 未找到匹配的文件: ${fileName}`);
+            }
+        } catch (error) {
+            this.logger.warn(`关闭文件失败: ${filePath}`, error as Error);
+        }
+    }
+
+    /**
+     * 检查当前编辑器是否处于活跃状态
+     */
+    private isCurrentEditorActive(): boolean {
+        return this.isCurrentWindowFocused();
+    }
+
+    /**
+     * 实时获取当前窗口是否聚焦
+     * 不依赖事件状态，直接从VSCode API获取实时状态
+     */
+    private isCurrentWindowFocused(): boolean {
+        return vscode.window.state.focused;
+    }
+
+    /**
+     * 获取当前活跃编辑器的状态
+     */
+    private getCurrentActiveEditorState(): EditorState | null {
+        try {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (!activeEditor) {
+                return null;
             }
 
+            const position = activeEditor.selection.active;
+            return new EditorState(
+                ActionType.NAVIGATE,
+                activeEditor.document.uri.fsPath,
+                position.line,
+                position.character,
+                SourceType.VSCODE,
+                true
+            );
         } catch (error) {
-            this.logger.warn(`通过文件名查找失败: ${error instanceof Error ? error.message : String(error)}`, error as Error);
+            this.logger.warn('获取当前活跃编辑器状态失败:', error as Error);
+            return null;
+        }
+    }
+
+    /**
+     * 根据文件路径打开文件
+     * @param filePath 文件路径
+     * @returns 返回打开的TextEditor，如果失败返回null
+     */
+    private async openFileByPath(filePath: string): Promise<vscode.TextEditor | null> {
+        try {
+            this.logger.info(`准备打开文件: ${filePath}`);
+            const uri = vscode.Uri.file(filePath);
+            const document = await vscode.workspace.openTextDocument(uri);
+            const editor = await vscode.window.showTextDocument(document, {preview: false});
+            this.logger.info(`✅ 成功打开文件: ${filePath}`);
+            return editor;
+        } catch (error) {
+            this.logger.warn(`打开文件失败: ${filePath}`, error as Error);
+            return null;
         }
     }
 }

@@ -24,7 +24,7 @@ class EditorStateManager(
 
     // 按文件路径分组的防抖定时器
     private val debounceTimers: ConcurrentHashMap<String, Timer> = ConcurrentHashMap()
-    
+
     // 读写锁，保护定时器操作的原子性
     private val timersLock = ReentrantReadWriteLock()
 
@@ -78,6 +78,49 @@ class EditorStateManager(
     }
 
     /**
+     * 获取工作区所有打开的文件路径
+     */
+    fun getAllOpenedFiles(): List<String> {
+        val fileEditorManager = FileEditorManager.getInstance(project)
+        return fileEditorManager.openFiles.map { it.path }
+    }
+
+    /**
+     * 创建工作区同步状态
+     */
+    fun createWorkspaceSyncState(isActive: Boolean = false): EditorState {
+        val fileEditorManager = FileEditorManager.getInstance(project)
+        val editor = fileEditorManager.selectedTextEditor
+        val file = fileEditorManager.selectedFiles.firstOrNull()
+        val openedFiles = getAllOpenedFiles()
+
+        return if (editor != null && file != null) {
+            EditorState(
+                action = ActionType.WORKSPACE_SYNC,
+                filePath = file.path,
+                line = editor.caretModel.logicalPosition.line,
+                column = editor.caretModel.logicalPosition.column,
+                source = SourceType.JETBRAINS,
+                isActive = isActive,
+                timestamp = formatTimestamp(),
+                openedFiles = openedFiles
+            )
+        } else {
+            // 没有活跃编辑器时，使用空的文件路径和位置
+            EditorState(
+                action = ActionType.WORKSPACE_SYNC,
+                filePath = "",
+                line = 0,
+                column = 0,
+                source = SourceType.JETBRAINS,
+                isActive = isActive,
+                timestamp = formatTimestamp(),
+                openedFiles = openedFiles
+            )
+        }
+    }
+
+    /**
      * 清理指定文件路径的防抖定时器
      * 使用写锁确保操作原子性
      */
@@ -96,7 +139,7 @@ class EditorStateManager(
      */
     fun debouncedUpdateState(state: EditorState) {
         val filePath = state.filePath
-        
+
         timersLock.write {
             // 清除该文件之前的防抖定时器
             val oldTimer = debounceTimers.remove(filePath)
@@ -116,7 +159,7 @@ class EditorStateManager(
                 }
             }
             timer.isRepeats = false
-            
+
             debounceTimers[filePath] = timer
             timer.start()
         }
@@ -155,7 +198,7 @@ class EditorStateManager(
      */
     fun dispose() {
         log.info("开始清理编辑器状态管理器资源")
-        
+
         timersLock.write {
             // 清理所有防抖定时器
             for ((filePath, timer) in debounceTimers) {
@@ -164,7 +207,7 @@ class EditorStateManager(
             }
             debounceTimers.clear()
         }
-        
+
         log.info("编辑器状态管理器资源清理完成")
     }
 }

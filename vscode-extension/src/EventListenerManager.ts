@@ -125,8 +125,11 @@ export class EventListenerManager {
                     this.logger.info("VSCode窗口获得焦点")
                 } else {
                     this.logger.info("VSCode窗口失去焦点")
+                    // 窗口失焦时发送工作区同步状态
+                    const workspaceSyncState = this.editorStateManager.createWorkspaceSyncState(true);
+                    this.logger.info(`发送工作区同步状态，包含${workspaceSyncState.openedFiles?.length || 0}个打开的文件`);
+                    this.editorStateManager.updateState(workspaceSyncState);
                 }
-                this.editorStateManager.sendCurrentState(this.isActive);
             })
         );
 

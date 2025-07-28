@@ -60,6 +60,57 @@ export class EditorStateManager {
     }
 
     /**
+     * 获取工作区所有打开的文件路径
+     */
+    getAllOpenedFiles(): string[] {
+        const openedFiles: string[] = [];
+
+        for (const tabGroup of vscode.window.tabGroups.all) {
+            for (const tab of tabGroup.tabs) {
+                if (tab.input instanceof vscode.TabInputText) {
+                    openedFiles.push(tab.input.uri.fsPath);
+                }
+            }
+        }
+
+        return openedFiles;
+    }
+
+    /**
+     * 创建工作区同步状态
+     */
+    createWorkspaceSyncState(isActive: boolean): EditorState {
+        const activeEditor = vscode.window.activeTextEditor;
+        const openedFiles = this.getAllOpenedFiles();
+
+        if (activeEditor) {
+            const position = activeEditor.selection.active;
+            return new EditorState(
+                ActionType.WORKSPACE_SYNC,
+                activeEditor.document.uri.fsPath,
+                position.line,
+                position.character,
+                SourceType.VSCODE,
+                isActive,
+                formatTimestamp(),
+                openedFiles
+            );
+        } else {
+            // 没有活跃编辑器时，使用空的文件路径和位置
+            return new EditorState(
+                ActionType.WORKSPACE_SYNC,
+                '',
+                0,
+                0,
+                SourceType.VSCODE,
+                isActive,
+                formatTimestamp(),
+                openedFiles
+            );
+        }
+    }
+
+    /**
      * 清理指定文件路径的防抖定时器
      */
     private clearDebounceTimer(filePath: string) {
@@ -91,7 +142,7 @@ export class EditorStateManager {
                 this.debounceTimers.delete(filePath);
             }
         }, this.debounceDelayMs);
-        
+
         this.debounceTimers.set(filePath, timer);
     }
 
@@ -127,14 +178,14 @@ export class EditorStateManager {
      */
     dispose() {
         this.logger.info("开始清理编辑器状态管理器资源")
-        
+
         // 清理所有防抖定时器
         for (const [filePath, timer] of this.debounceTimers) {
             clearTimeout(timer);
             this.logger.debug(`清理防抖定时器: ${filePath}`);
         }
         this.debounceTimers.clear();
-        
+
         this.logger.info("编辑器状态管理器资源清理完成")
     }
 }

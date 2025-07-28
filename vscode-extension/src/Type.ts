@@ -6,7 +6,8 @@
 export enum ActionType {
     CLOSE = "CLOSE",        // 关闭文件
     OPEN = "OPEN",          // 打开文件
-    NAVIGATE = "NAVIGATE"   // 光标导航
+    NAVIGATE = "NAVIGATE",  // 光标导航
+    WORKSPACE_SYNC = "WORKSPACE_SYNC"  // 工作区状态同步
 }
 
 /**
@@ -40,6 +41,7 @@ export class EditorState {
     public source: SourceType;        // 消息来源枚举
     public isActive: boolean;         // IDE是否处于活跃状态
     public timestamp: string;         // 时间戳 (yyyy-MM-dd HH:mm:ss.SSS)
+    public openedFiles?: string[];    // 工作区所有打开的文件（仅WORKSPACE_SYNC类型使用）
 
     // 平台兼容路径缓存
     private _compatiblePath?: string;
@@ -51,7 +53,8 @@ export class EditorState {
         column: number,
         source: SourceType = SourceType.VSCODE,
         isActive: boolean = false,
-        timestamp: string = formatTimestamp()
+        timestamp: string = formatTimestamp(),
+        openedFiles?: string[]
     ) {
         this.action = action;
         this.filePath = filePath;
@@ -60,6 +63,7 @@ export class EditorState {
         this.source = source;
         this.isActive = isActive;
         this.timestamp = timestamp;
+        this.openedFiles = openedFiles;
     }
 
     /**

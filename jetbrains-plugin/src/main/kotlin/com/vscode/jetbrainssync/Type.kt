@@ -12,7 +12,8 @@ import java.util.*
 enum class ActionType {
     CLOSE,      // 关闭文件
     OPEN,       // 打开文件
-    NAVIGATE    // 光标导航
+    NAVIGATE,   // 光标导航
+    WORKSPACE_SYNC  // 工作区状态同步
 }
 
 /**
@@ -45,7 +46,8 @@ data class EditorState(
     val column: Int,                // 列号（从0开始）
     val source: SourceType = SourceType.JETBRAINS, // 消息来源枚举
     val isActive: Boolean = false,  // IDE是否处于活跃状态
-    val timestamp: String = formatTimestamp() // 时间戳 (yyyy-MM-dd HH:mm:ss.SSS)
+    val timestamp: String = formatTimestamp(), // 时间戳 (yyyy-MM-dd HH:mm:ss.SSS)
+    val openedFiles: List<String>? = null  // 工作区所有打开的文件（仅WORKSPACE_SYNC类型使用）
 ) {
     // 平台兼容路径缓存
     @Transient

@@ -184,14 +184,16 @@ class EventListenerManager(
                 if (frame.isVisible && frame.state != java.awt.Frame.ICONIFIED && frame.isFocused) {
                     isActive.set(true)
                     log.info("JetBrains窗口获得焦点")
-                    editorStateManager.sendCurrentState(isActive.get())
                 }
             }
 
             override fun windowLostFocus(e: java.awt.event.WindowEvent?) {
                 isActive.set(false)
                 log.info("JetBrains窗口失去焦点")
-                editorStateManager.sendCurrentState(isActive.get())
+                // 窗口失焦时发送工作区同步状态
+                val workspaceSyncState = editorStateManager.createWorkspaceSyncState(true)
+                log.info("发送工作区同步状态，包含${workspaceSyncState.openedFiles?.size ?: 0}个打开的文件")
+                editorStateManager.updateState(workspaceSyncState)
             }
         })
         log.info("窗口监听器设置完成")

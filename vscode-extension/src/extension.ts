@@ -53,10 +53,10 @@ export class VSCodeJetBrainsSync {
      */
     private initializeComponents() {
         this.editorStateManager = new EditorStateManager(this.logger);
-        this.fileOperationHandler = new FileOperationHandler(this.logger);
+        this.eventListenerManager = new EventListenerManager(this.logger, this.editorStateManager);
+        this.fileOperationHandler = new FileOperationHandler(this.logger, this.eventListenerManager);
         this.messageProcessor = new MessageProcessor(this.logger, this.fileOperationHandler);
         this.multicastManager = new MulticastManager(this.logger, this.messageProcessor);
-        this.eventListenerManager = new EventListenerManager(this.logger, this.editorStateManager);
         this.operationQueueProcessor = new OperationQueueProcessor(
             this.messageProcessor, this.logger, this.multicastManager
         );
@@ -87,7 +87,7 @@ export class VSCodeJetBrainsSync {
 
         // 状态变化回调
         this.editorStateManager.setStateChangeCallback((state: EditorState) => {
-            if (this.eventListenerManager.isActiveWindow()) {
+            if (state.isActive) {
                 this.operationQueueProcessor.addOperation(state);
             }
         });

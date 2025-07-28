@@ -52,7 +52,8 @@ export class MessageProcessor {
             rawData.column,
             rawData.source,
             rawData.isActive,
-            rawData.timestamp
+            rawData.timestamp,
+            rawData.openedFiles
         );
     }
 

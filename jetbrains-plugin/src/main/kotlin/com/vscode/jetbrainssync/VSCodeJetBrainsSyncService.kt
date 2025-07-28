@@ -23,10 +23,10 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
 
     // 核心组件
     private val editorStateManager = EditorStateManager(project)
-    private val fileOperationHandler = FileOperationHandler(project)
+    private val eventListenerManager = EventListenerManager(project, editorStateManager)
+    private val fileOperationHandler = FileOperationHandler(project, eventListenerManager)
     private val messageProcessor = MessageProcessor(fileOperationHandler)
     private val multicastManager = MulticastManager(project, messageProcessor)
-    private val eventListenerManager = EventListenerManager(project, editorStateManager)
     private val operationQueueProcessor = OperationQueueProcessor(messageProcessor, multicastManager)
 
 
@@ -81,7 +81,7 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
         // 状态变化回调
         editorStateManager.setStateChangeCallback(object : EditorStateManager.StateChangeCallback {
             override fun onStateChanged(state: EditorState) {
-                if (eventListenerManager.isActiveWindow()) {
+                if (state.isActive) {
                     operationQueueProcessor.addOperation(state)
                 }
             }
@@ -120,10 +120,10 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
      */
     fun updateMulticastPort() {
         log.info("重启所有连接（WebSocket和组播）")
-        
+
         // 更新组播端口配置
         multicastManager.updateMulticastPort()
-        
+
         updateStatusBarWidget()
     }
 
