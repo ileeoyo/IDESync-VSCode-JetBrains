@@ -263,10 +263,9 @@ class FileOperationHandler(
                     log.warn("❌ 无法获取文件编辑器: $filePath")
                     return null
                 }
-            } ?: run {
-                log.warn("❌ 无法找到要打开的文件: $filePath")
-                return null
             }
+            log.warn("❌ 无法找到要打开的文件: $filePath")
+            return null
         } catch (e: Exception) {
             log.warn("打开文件失败: $filePath - ${e.message}", e)
             return null
