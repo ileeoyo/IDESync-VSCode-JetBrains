@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import {ActionType, EditorState, SourceType} from './Type';
 import {Logger} from './Logger';
-import {EventListenerManager} from './EventListenerManager';
+import {FileUtils} from './FileUtils';
 
 /**
  * 文件操作处理器
@@ -10,11 +10,9 @@ import {EventListenerManager} from './EventListenerManager';
  */
 export class FileOperationHandler {
     private logger: Logger;
-    private eventListenerManager: EventListenerManager;
 
-    constructor(logger: Logger, eventListenerManager: EventListenerManager) {
+    constructor(logger: Logger) {
         this.logger = logger;
-        this.eventListenerManager = eventListenerManager;
     }
 
 
@@ -71,6 +69,7 @@ export class FileOperationHandler {
 
             this.logger.info(`当前打开文件: ${currentOpenedFiles.length}个`);
             this.logger.info(`目标文件: ${targetFiles.length}个`);
+            this.logger.info(`当前打开的常规文件列表: ${currentOpenedFiles.map(f => path.basename(f)).join(', ')}`);
 
             // 关闭多余的文件（当前打开但目标中不存在的文件）
             const filesToClose = currentOpenedFiles.filter((file: string) => !targetFiles.includes(file));
@@ -135,20 +134,27 @@ export class FileOperationHandler {
 
     /**
      * 获取当前所有打开的文件路径
+     * 只返回常规文件标签，过滤掉特殊标签窗口
      */
     private getCurrentOpenedFiles(): string[] {
         const openedFiles: string[] = [];
 
         for (const tabGroup of vscode.window.tabGroups.all) {
             for (const tab of tabGroup.tabs) {
-                if (tab.input instanceof vscode.TabInputText) {
-                    openedFiles.push(tab.input.uri.fsPath);
+                // 只处理常规文本文件标签，过滤掉所有特殊标签类型
+                if (FileUtils.isRegularFileTab(tab)) {
+                    const tabInput = tab.input as vscode.TabInputText;
+                    const uri = tabInput.uri;
+
+                    // 文件协议已在 FileUtils.isRegularFileTab 中验证，直接添加
+                    openedFiles.push(uri.fsPath);
                 }
             }
         }
 
         return openedFiles;
     }
+
 
     /**
      * 根据文件路径关闭文件

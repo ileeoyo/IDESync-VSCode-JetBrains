@@ -47,6 +47,10 @@ class EventListenerManager(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
+                    if (!FileUtils.isRegularFileEditor(file)) {
+                        log.info("事件-文件打开: ${file.path} - 非常规文件，已忽略")
+                        return
+                    }
                     log.info("事件-文件打开: ${file.path}")
                     val editor = source.selectedTextEditor
                     editor?.let {
@@ -60,6 +64,10 @@ class EventListenerManager(
                 }
 
                 override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
+                    if (!FileUtils.isRegularFileEditor(file)) {
+                        log.info("事件-文件关闭: ${file.path} - 非常规文件，已忽略")
+                        return
+                    }
                     log.info("事件-文件关闭: ${file.path}")
 
                     // 检查文件是否在其他编辑器中仍然打开
@@ -77,6 +85,10 @@ class EventListenerManager(
 
                 override fun selectionChanged(event: FileEditorManagerEvent) {
                     if (event.newFile != null) {
+                        if (!FileUtils.isRegularFileEditor(event.newFile!!)) {
+                            log.info("事件-文件改变: ${event.newFile!!.path} - 非常规文件，已忽略")
+                            return
+                        }
                         log.info("事件-文件改变: ${event.newFile!!.path}")
                         val editor = FileEditorManager.getInstance(project).selectedTextEditor
                         editor?.let {
@@ -111,6 +123,10 @@ class EventListenerManager(
                 // 动态获取当前真正的文件
                 val currentFile = getCurrentFile(event.editor)
                 if (currentFile != null) {
+                    if (!FileUtils.isRegularFileEditor(currentFile)) {
+                        log.info("事件-光标改变: ${currentFile.path} - 非常规文件，已忽略")
+                        return
+                    }
                     log.info("事件-光标改变： 当前文件: ${currentFile.path}, 光标位置: 行${event.newPosition.line + 1}, 列${event.newPosition.column + 1}")
 
                     val state = editorStateManager.createEditorState(

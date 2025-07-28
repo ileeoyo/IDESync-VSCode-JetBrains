@@ -15,8 +15,7 @@ import java.io.File
  * 负责处理文件的打开、关闭和导航操作
  */
 class FileOperationHandler(
-    private val project: Project,
-    private val eventListenerManager: EventListenerManager
+    private val project: Project
 ) {
     private val log: Logger = Logger.getInstance(FileOperationHandler::class.java)
 
@@ -75,6 +74,7 @@ class FileOperationHandler(
 
             log.info("当前打开文件: ${currentOpenedFiles.size}个")
             log.info("目标文件: ${targetFiles.size}个")
+            log.info("当前打开的常规文件列表: ${currentOpenedFiles.map { java.io.File(it).name }.joinToString(", ")}")
 
             // 关闭多余的文件（当前打开但目标中不存在的文件）
             val filesToClose = currentOpenedFiles.filter { file -> !targetFiles.contains(file) }
@@ -141,11 +141,18 @@ class FileOperationHandler(
 
     /**
      * 获取当前所有打开的文件路径
+     * 只返回常规文件标签，过滤掉特殊标签窗口
      */
     private fun getCurrentOpenedFiles(): List<String> {
         val fileEditorManager = FileEditorManager.getInstance(project)
-        return fileEditorManager.openFiles.map { it.path }
+        return fileEditorManager.openFiles
+            .filter { virtualFile ->
+                // 只保留常规文件编辑器，过滤掉所有特殊标签窗口
+                FileUtils.isRegularFileEditor(virtualFile)
+            }
+            .map { it.path }
     }
+
 
     /**
      * 根据文件路径关闭文件
@@ -248,7 +255,7 @@ class FileOperationHandler(
                 // FileEditorManager.openFile() 会自动复用已打开的文件，无需手动检查
                 val editors = fileEditorManager.openFile(vFile, false)
                 val editor = editors.firstOrNull() as? TextEditor
-                
+
                 if (editor != null) {
                     log.info("✅ 成功打开文件: $filePath")
                     return editor

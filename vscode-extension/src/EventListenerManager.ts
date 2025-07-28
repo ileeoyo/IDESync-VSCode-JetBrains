@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import {ActionType} from './Type';
 import {Logger} from './Logger';
 import {EditorStateManager} from './EditorStateManager';
+import {FileUtils} from './FileUtils';
 
 /**
  * 事件监听管理器
@@ -28,8 +29,9 @@ export class EventListenerManager {
     private isFileOpenInOtherTabs(filePath: string): boolean {
         for (const tabGroup of vscode.window.tabGroups.all) {
             for (const tab of tabGroup.tabs) {
-                if (tab.input instanceof vscode.TabInputText) {
-                    if (tab.input.uri.fsPath === filePath) {
+                if (FileUtils.isRegularFileTab(tab)) {
+                    const uri = (tab.input as vscode.TabInputText).uri;
+                    if (uri.fsPath === filePath) {
                         return true;
                     }
                 }
@@ -49,8 +51,8 @@ export class EventListenerManager {
                 if (!editor) {
                     return;
                 }
-                if (editor.document.uri.scheme !== 'file') {
-                    return
+                if (!FileUtils.isRegularFileUri(editor.document.uri)) {
+                    return;
                 }
                 this.logger.info(`事件-文件打开: ${editor.document.uri.fsPath}`);
                 const state = this.editorStateManager.createEditorState(
@@ -66,10 +68,10 @@ export class EventListenerManager {
         this.disposables.push(
             vscode.window.tabGroups.onDidChangeTabs((event) => {
                 event.closed.forEach((tab, index) => {
-                    // 检测tab类型为TabInputText，其他类型则忽略
-                    if (tab.input instanceof vscode.TabInputText) {
-                        this.logger.info(`事件-文件关闭：${tab.input.uri.fsPath}`);
-                        const uri = tab.input.uri;
+                    // 检测tab类型为常规文件，其他类型则忽略
+                    if (FileUtils.isRegularFileTab(tab)) {
+                        const uri = (tab.input as vscode.TabInputText).uri;
+                        this.logger.info(`事件-文件关闭：${uri.fsPath}`);
                         const filePath = uri.fsPath;
 
                         // 检查文件是否在其他TAB中仍然打开
@@ -87,7 +89,7 @@ export class EventListenerManager {
                         this.logger.info(`准备发送关闭消息: ${state.filePath}`);
                         this.editorStateManager.updateState(state)
                     } else {
-                        this.logger.info(`关闭TAB ${index}: 非TabInputText类型，已忽略`);
+                        this.logger.info(`关闭TAB ${index}: 非常规文件类型，已忽略`);
                     }
                 });
             })
@@ -96,8 +98,8 @@ export class EventListenerManager {
         // 监听光标位置变化
         this.disposables.push(
             vscode.window.onDidChangeTextEditorSelection((event) => {
-                if (event.textEditor.document.uri.scheme !== 'file') {
-                    return
+                if (!FileUtils.isRegularFileUri(event.textEditor.document.uri)) {
+                    return;
                 }
                 this.logger.info(`事件-文件改变: ${event.textEditor.document.uri.fsPath}`);
                 if (event.textEditor === vscode.window.activeTextEditor) {
