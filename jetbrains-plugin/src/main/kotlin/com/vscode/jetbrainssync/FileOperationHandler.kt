@@ -74,7 +74,7 @@ class FileOperationHandler(
 
             log.info("当前打开文件: ${currentOpenedFiles.size}个")
             log.info("目标文件: ${targetFiles.size}个")
-            log.info("当前打开的常规文件列表: ${currentOpenedFiles.map { java.io.File(it).name }.joinToString(", ")}")
+            log.info("当前打开的常规文件列表: ${currentOpenedFiles.joinToString(", ") { File(it).name }}")
 
             // 关闭多余的文件（当前打开但目标中不存在的文件）
             val filesToClose = currentOpenedFiles.filter { file -> !targetFiles.contains(file) }
