@@ -251,7 +251,6 @@ export class MulticastManager {
      */
     private handleReceivedMessage(message: string): void {
         try {
-            this.logger.info(`收到组播消息: ${message}`);
             this.messageProcessor.handleMessage(message, LocalIdentifierManager.getInstance().identifier);
         } catch (error) {
             this.logger.warn('处理接收到的消息时发生错误:', error as Error);

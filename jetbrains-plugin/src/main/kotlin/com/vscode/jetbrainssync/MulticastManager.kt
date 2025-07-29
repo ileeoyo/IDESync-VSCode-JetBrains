@@ -267,7 +267,6 @@ class MulticastManager(
      */
     private fun handleReceivedMessage(message: String) {
         try {
-            log.info("收到组播消息: $message")
             messageProcessor.handleMessage(message, LocalIdentifierManager.identifier)
         } catch (e: Exception) {
             log.warn("处理接收到的消息时发生错误: ${e.message}", e)
