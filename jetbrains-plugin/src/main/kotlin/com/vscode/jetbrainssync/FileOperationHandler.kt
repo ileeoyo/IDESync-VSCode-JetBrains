@@ -86,8 +86,10 @@ class FileOperationHandler(
                 openFileByPath(fileToOpen)
             }
 
-            // 恢复之前保存的活跃编辑器状态，或处理指定的活跃文件
-            if (isCurrentEditorActive() && savedActiveEditorState != null) {
+            val currentActiveState = isCurrentEditorActive();
+            log.info("当前编辑器活跃状态: ${currentActiveState}");
+            log.info("之前保存的活跃编辑器状态: ${savedActiveEditorState?.filePath}");
+            if (currentActiveState && savedActiveEditorState != null) {
                 log.info("恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}")
                 handleFileOpenOrNavigate(savedActiveEditorState)
 

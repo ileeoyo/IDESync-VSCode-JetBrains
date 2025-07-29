@@ -85,8 +85,10 @@ export class FileOperationHandler {
                 await this.openFileByPath(fileToOpen);
             }
 
-            // 恢复之前保存的活跃编辑器状态，或处理指定的活跃文件
-            if (this.isCurrentEditorActive() && savedActiveEditorState) {
+            const currentActiveState = await this.isCurrentEditorActive();
+            this.logger.info(`当前编辑器活跃状态: ${currentActiveState}`);
+            this.logger.info(`之前保存的活跃编辑器状态: ${savedActiveEditorState?.filePath}`);
+            if (currentActiveState && savedActiveEditorState) {
                 this.logger.info(`恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}`);
                 await this.handleFileOpenOrNavigate(savedActiveEditorState);
 
@@ -205,14 +207,6 @@ export class FileOperationHandler {
     }
 
     /**
-     * 检查当前编辑器是否处于活跃状态
-     */
-    private isCurrentEditorActive(): boolean {
-        // 对于关键的编辑器状态检查，使用强制实时查询确保准确性
-        return this.windowStateManager.isWindowActive(true);
-    }
-
-    /**
      * 获取当前活跃编辑器的状态
      */
     private getCurrentActiveEditorState(): EditorState | null {
@@ -254,5 +248,27 @@ export class FileOperationHandler {
             this.logger.warn(`打开文件失败: ${filePath}`, error as Error);
             return null;
         }
+    }
+
+    /**
+     * 检查当前编辑器是否处于活跃状态
+     * 对于关键的编辑器状态检查，使用重试机制确保准确性
+     */
+    private async isCurrentEditorActive(): Promise<boolean> {
+        let attempts = 0;
+        const maxAttempts = 5;
+        const delay = 100; // 每次尝试之间的延迟
+
+        while (attempts < maxAttempts) {
+            // 对于关键的编辑器状态检查，使用强制实时查询确保准确性
+            const isActive = this.windowStateManager.isWindowActive(true);
+            if (isActive) {
+                return true;
+            }
+            this.logger.warn(`检查活跃编辑器状态失败，尝试 ${attempts + 1}/${maxAttempts}...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            attempts++;
+        }
+        return false;
     }
 }
