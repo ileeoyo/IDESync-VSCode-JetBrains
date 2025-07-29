@@ -295,8 +295,6 @@ export class MulticastManager {
      */
     private handleReceivedMessage(message: string): void {
         try {
-            this.logger.info(`收到组播消息: ${message}`);
-
             const messageData = this.parseMessageData(message);
             if (!messageData) return;
 
@@ -305,6 +303,8 @@ export class MulticastManager {
                 this.logger.debug('忽略自己发送的消息');
                 return;
             }
+            this.logger.info(`收到组播消息: ${message}`);
+
 
             // 检查消息去重
             if (this.isDuplicateMessage(messageData)) {

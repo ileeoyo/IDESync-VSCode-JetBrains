@@ -319,43 +319,63 @@ class MulticastManager(
      */
     private fun handleReceivedMessage(message: String) {
         try {
-            log.info("收到组播消息: $message")
-
-            // 解析消息以检查发送者
             val messageData = parseMessageData(message)
+            if (messageData == null) return
 
             // 检查是否是自己发送的消息
-            if (messageData?.senderId == localIdentifier) {
+            if (isOwnMessage(messageData)) {
                 log.debug("忽略自己发送的消息")
                 return
             }
+            log.info("收到组播消息: $message")
 
-            // 检查消息是否已经处理过（去重）
-            val messageId = messageData?.messageId
-            if (messageId != null) {
-                if (receivedMessages.containsKey(messageId)) {
-                    log.debug("忽略重复消息: $messageId")
-                    return
-                }
-
-                // 记录消息ID
-                val currentTime = System.currentTimeMillis()
-                receivedMessages[messageId] = currentTime
-
-                // 限制缓存大小
-                if (receivedMessages.size > maxReceivedMessagesSize) {
-                    cleanupOldMessages()
-                }
+            // 检查消息去重
+            if (isDuplicateMessage(messageData)) {
+                log.debug("忽略重复消息: ${messageData.messageId}")
+                return
             }
 
-            // 提取实际的编辑器状态消息
-            val editorStateMessage = messageData?.payload
-            if (editorStateMessage != null) {
-                messageProcessor.handleIncomingMessage(editorStateMessage)
-            }
+            // 记录消息并处理
+            recordMessage(messageData)
+            processMessage(messageData)
 
         } catch (e: Exception) {
             log.warn("处理接收到的消息时发生错误: ${e.message}", e)
+        }
+    }
+
+    /**
+     * 检查是否是自己发送的消息
+     */
+    private fun isOwnMessage(messageData: MessageWrapper): Boolean {
+        return messageData.senderId == localIdentifier
+    }
+
+    /**
+     * 检查是否是重复消息
+     */
+    private fun isDuplicateMessage(messageData: MessageWrapper): Boolean {
+        return receivedMessages.containsKey(messageData.messageId)
+    }
+
+    /**
+     * 记录消息ID
+     */
+    private fun recordMessage(messageData: MessageWrapper) {
+        val currentTime = System.currentTimeMillis()
+        receivedMessages[messageData.messageId] = currentTime
+
+        if (receivedMessages.size > maxReceivedMessagesSize) {
+            cleanupOldMessages()
+        }
+    }
+
+    /**
+     * 处理消息内容
+     */
+    private fun processMessage(messageData: MessageWrapper) {
+        if (messageData.payload.isNotEmpty()) {
+            messageProcessor.handleIncomingMessage(messageData.payload)
         }
     }
 
