@@ -10,6 +10,7 @@ import com.intellij.openapi.project.Project
  * VSCode与JetBrains同步服务（重构版）
  *
  * 采用模块化设计，主要组件：
+ * - 窗口状态管理器：统一管理窗口活跃状态
  * - WebSocket连接管理器：负责连接的建立、维护和重连
  * - 编辑器状态管理器：管理状态缓存、防抖和去重
  * - 文件操作处理器：处理文件的打开、关闭和导航
@@ -22,9 +23,10 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     private val log: Logger = Logger.getInstance(VSCodeJetBrainsSyncService::class.java)
 
     // 核心组件
+    private val windowStateManager = WindowStateManager(project)
     private val editorStateManager = EditorStateManager(project)
-    private val eventListenerManager = EventListenerManager(project, editorStateManager)
-    private val fileOperationHandler = FileOperationHandler(project, editorStateManager)
+    private val eventListenerManager = EventListenerManager(project, editorStateManager, windowStateManager)
+    private val fileOperationHandler = FileOperationHandler(project, editorStateManager, windowStateManager)
     private val messageProcessor = MessageProcessor(fileOperationHandler)
     private val multicastManager = MulticastManager(project, messageProcessor)
     private val operationQueueProcessor = OperationQueueProcessor(multicastManager)
@@ -32,6 +34,10 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
 
     init {
         log.info("初始化VSCode-JetBrains同步服务（重构版）")
+
+        // 初始化窗口状态管理器
+        windowStateManager.initialize()
+
         // 设置状态栏
         setupStatusBar()
 
@@ -39,7 +45,6 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
         setupComponentCallbacks()
         // 初始化事件监听器
         eventListenerManager.setupEditorListeners()
-        eventListenerManager.setupWindowListeners()
 
         log.info("同步服务初始化完成")
     }
@@ -59,12 +64,22 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
      * 设置组件间的回调关系
      */
     private fun setupComponentCallbacks() {
+        // 窗口状态变化回调
+        windowStateManager.setOnWindowStateChangeCallback { isActive ->
+            if (!isActive) {
+                // 窗口失焦时发送工作区同步状态
+                val workspaceSyncState = editorStateManager.createWorkspaceSyncState(true)
+                log.info("窗口失焦，发送工作区同步状态，包含${workspaceSyncState.openedFiles?.size ?: 0}个打开的文件")
+                editorStateManager.updateState(workspaceSyncState)
+            }
+        }
+
         // 连接状态变化回调
         multicastManager.setConnectionCallback(object : ConnectionCallback {
             override fun onConnected() {
                 log.info("组播连接状态变更: 已连接");
                 updateStatusBarWidget()
-                editorStateManager.sendCurrentState(eventListenerManager.isActiveWindow())
+                editorStateManager.sendCurrentState(windowStateManager.isWindowActive())
             }
 
             override fun onDisconnected() {

@@ -4,6 +4,7 @@ import {ActionType, EditorState, SourceType} from './Type';
 import {Logger} from './Logger';
 import {FileUtils} from './FileUtils';
 import {EditorStateManager} from './EditorStateManager';
+import {WindowStateManager} from './WindowStateManager';
 
 /**
  * 文件操作处理器
@@ -12,10 +13,12 @@ import {EditorStateManager} from './EditorStateManager';
 export class FileOperationHandler {
     private logger: Logger;
     private editorStateManager: EditorStateManager;
+    private windowStateManager: WindowStateManager;
 
-    constructor(logger: Logger, editorStateManager: EditorStateManager) {
+    constructor(logger: Logger, editorStateManager: EditorStateManager, windowStateManager: WindowStateManager) {
         this.logger = logger;
         this.editorStateManager = editorStateManager;
+        this.windowStateManager = windowStateManager;
     }
 
 
@@ -205,15 +208,8 @@ export class FileOperationHandler {
      * 检查当前编辑器是否处于活跃状态
      */
     private isCurrentEditorActive(): boolean {
-        return this.isCurrentWindowFocused();
-    }
-
-    /**
-     * 实时获取当前窗口是否聚焦
-     * 不依赖事件状态，直接从VSCode API获取实时状态
-     */
-    private isCurrentWindowFocused(): boolean {
-        return vscode.window.state.focused;
+        // 对于关键的编辑器状态检查，使用强制实时查询确保准确性
+        return this.windowStateManager.isWindowActive(true);
     }
 
     /**

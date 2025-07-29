@@ -16,7 +16,8 @@ import java.io.File
  */
 class FileOperationHandler(
     private val project: Project,
-    private val editorStateManager: EditorStateManager
+    private val editorStateManager: EditorStateManager,
+    private val windowStateManager: WindowStateManager
 ) {
     private val log: Logger = Logger.getInstance(FileOperationHandler::class.java)
 
@@ -201,15 +202,8 @@ class FileOperationHandler(
      * 检查当前编辑器是否处于活跃状态
      */
     private fun isCurrentEditorActive(): Boolean {
-        return isCurrentWindowFocused()
-    }
-
-    /**
-     * 实时获取当前窗口是否聚焦
-     * 不依赖事件状态，直接从IntelliJ API获取实时状态
-     */
-    private fun isCurrentWindowFocused(): Boolean {
-        return ApplicationManager.getApplication().isActive
+        // 对于关键的编辑器状态检查，使用强制实时查询确保准确性
+        return windowStateManager.isWindowActive(forceRealTime = true)
     }
 
     /**

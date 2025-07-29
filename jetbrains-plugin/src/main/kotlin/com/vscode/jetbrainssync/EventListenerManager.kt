@@ -7,22 +7,18 @@ import com.intellij.openapi.fileEditor.FileEditorManagerEvent
 import com.intellij.openapi.fileEditor.FileEditorManagerListener
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.openapi.wm.WindowManager
 import com.intellij.util.messages.MessageBusConnection
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * 事件监听管理器
- * 统一管理各种编辑器和窗口事件监听器，将事件转换为标准的操作任务
+ * 统一管理各种编辑器事件监听器，将事件转换为标准的操作任务
  */
 class EventListenerManager(
     private val project: Project,
     private val editorStateManager: EditorStateManager,
+    private val windowStateManager: WindowStateManager
 ) {
     private val log: Logger = Logger.getInstance(EventListenerManager::class.java)
-
-    // 活跃状态
-    private val isActive = AtomicBoolean(true)
 
     // 全局唯一的光标监听器引用
     private var currentCaretListener: com.intellij.openapi.editor.event.CaretListener? = null
@@ -55,7 +51,7 @@ class EventListenerManager(
                     val editor = source.selectedTextEditor
                     editor?.let {
                         val state = editorStateManager.createEditorState(
-                            it, file, ActionType.OPEN, isActive.get()
+                            it, file, ActionType.OPEN, windowStateManager.isWindowActive()
                         )
                         log.info("准备发送打开消息: $state")
                         editorStateManager.updateState(state)
@@ -78,7 +74,7 @@ class EventListenerManager(
                     }
 
                     // 创建关闭状态并发送到队列（无需依赖editor对象）
-                    val state = editorStateManager.createCloseState(file.path, isActive.get())
+                    val state = editorStateManager.createCloseState(file.path, windowStateManager.isWindowActive())
                     log.info("准备发送关闭消息: $state")
                     editorStateManager.updateState(state)
                 }
@@ -93,7 +89,7 @@ class EventListenerManager(
                         val editor = FileEditorManager.getInstance(project).selectedTextEditor
                         editor?.let {
                             val state = editorStateManager.createEditorState(
-                                it, event.newFile!!, ActionType.NAVIGATE, isActive.get()
+                                it, event.newFile!!, ActionType.NAVIGATE, windowStateManager.isWindowActive()
                             )
                             log.info("准备发送导航消息: $state")
                             editorStateManager.debouncedUpdateState(state)
@@ -130,7 +126,7 @@ class EventListenerManager(
                     log.info("事件-光标改变： 当前文件: ${currentFile.path}, 光标位置: 行${event.newPosition.line + 1}, 列${event.newPosition.column + 1}")
 
                     val state = editorStateManager.createEditorState(
-                        event.editor, currentFile, ActionType.NAVIGATE, isActive.get()
+                        event.editor, currentFile, ActionType.NAVIGATE, windowStateManager.isWindowActive()
                     )
                     log.info("准备发送导航消息: $state")
                     editorStateManager.debouncedUpdateState(state)
@@ -188,37 +184,6 @@ class EventListenerManager(
             null
         }
     }
-
-    /**
-     * 设置窗口监听器
-     */
-    fun setupWindowListeners() {
-        log.info("设置窗口监听器")
-        val frame = WindowManager.getInstance().getFrame(project)
-        frame?.addWindowFocusListener(object : java.awt.event.WindowFocusListener {
-            override fun windowGainedFocus(e: java.awt.event.WindowEvent?) {
-                if (frame.isVisible && frame.state != java.awt.Frame.ICONIFIED && frame.isFocused) {
-                    isActive.set(true)
-                    log.info("JetBrains窗口获得焦点")
-                }
-            }
-
-            override fun windowLostFocus(e: java.awt.event.WindowEvent?) {
-                isActive.set(false)
-                log.info("JetBrains窗口失去焦点")
-                // 窗口失焦时发送工作区同步状态
-                val workspaceSyncState = editorStateManager.createWorkspaceSyncState(true)
-                log.info("发送工作区同步状态，包含${workspaceSyncState.openedFiles?.size ?: 0}个打开的文件")
-                editorStateManager.updateState(workspaceSyncState)
-            }
-        })
-        log.info("窗口监听器设置完成")
-    }
-
-    /**
-     * 获取活跃状态
-     */
-    fun isActiveWindow(): Boolean = isActive.get()
 
     /**
      * 清理资源
