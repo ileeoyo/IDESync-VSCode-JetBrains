@@ -195,3 +195,87 @@ export interface ConnectionCallback {
 
     onReconnecting(): void;
 }
+
+/**
+ * 消息包装器类
+ * 用于组播消息的统一包装和处理
+ */
+export class MessageWrapper {
+    private static messageSequence = 0;
+
+    public messageId: string;
+    public senderId: string;
+    public timestamp: number;
+    public payload: EditorState;
+
+    constructor(messageId: string, senderId: string, timestamp: number, payload: EditorState) {
+        this.messageId = messageId;
+        this.senderId = senderId;
+        this.timestamp = timestamp;
+        this.payload = payload;
+    }
+
+    /**
+     * 生成消息ID
+     * 格式: {localIdentifier}-{sequence}-{timestamp}
+     */
+    static generateMessageId(localIdentifier: string): string {
+        MessageWrapper.messageSequence++;
+        const timestamp = Date.now();
+        return `${localIdentifier}-${MessageWrapper.messageSequence}-${timestamp}`;
+    }
+
+    /**
+     * 创建消息包装器
+     */
+    static create(localIdentifier: string, payload: EditorState): MessageWrapper {
+        return new MessageWrapper(
+            MessageWrapper.generateMessageId(localIdentifier),
+            localIdentifier,
+            Date.now(),
+            payload
+        );
+    }
+
+    /**
+     * 转换为JSON字符串
+     */
+    toJsonString(): string {
+        return JSON.stringify(this);
+    }
+
+    /**
+     * 从JSON字符串解析MessageWrapper
+     */
+    static fromJsonString(jsonString: string): MessageWrapper | null {
+        try {
+            const data = JSON.parse(jsonString);
+            const editorState = new EditorState(
+                data.payload.action,
+                data.payload.filePath,
+                data.payload.line,
+                data.payload.column,
+                data.payload.source,
+                data.payload.isActive,
+                data.payload.timestamp,
+                data.payload.openedFiles
+            );
+            
+            return new MessageWrapper(
+                data.messageId,
+                data.senderId,
+                data.timestamp,
+                editorState
+            );
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
+     * 检查是否是自己发送的消息
+     */
+    isOwnMessage(localIdentifier: string): boolean {
+        return this.senderId === localIdentifier;
+    }
+}

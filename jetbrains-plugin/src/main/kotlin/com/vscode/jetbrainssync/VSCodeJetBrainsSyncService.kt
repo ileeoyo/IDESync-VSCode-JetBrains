@@ -27,7 +27,7 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     private val fileOperationHandler = FileOperationHandler(project)
     private val messageProcessor = MessageProcessor(fileOperationHandler)
     private val multicastManager = MulticastManager(project, messageProcessor)
-    private val operationQueueProcessor = OperationQueueProcessor(messageProcessor, multicastManager)
+    private val operationQueueProcessor = OperationQueueProcessor(multicastManager)
 
 
     init {

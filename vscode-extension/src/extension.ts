@@ -58,7 +58,7 @@ export class VSCodeJetBrainsSync {
         this.messageProcessor = new MessageProcessor(this.logger, this.fileOperationHandler);
         this.multicastManager = new MulticastManager(this.logger, this.messageProcessor);
         this.operationQueueProcessor = new OperationQueueProcessor(
-            this.messageProcessor, this.logger, this.multicastManager
+            this.logger, this.multicastManager
         );
     }
 

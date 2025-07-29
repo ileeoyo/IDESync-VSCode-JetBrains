@@ -1,19 +1,11 @@
 import * as dgram from 'dgram';
 import * as os from 'os';
 import * as vscode from 'vscode';
-import {ConnectionCallback, ConnectionState} from './Type';
+import {ConnectionCallback, ConnectionState, EditorState, MessageWrapper} from './Type';
 import {Logger} from './Logger';
 import {MessageProcessor} from './MessageProcessor';
+import {LocalIdentifierManager} from './LocalIdentifierManager';
 
-/**
- * 消息包装器接口
- */
-interface MessageWrapper {
-    messageId: string;
-    senderId: string;
-    timestamp: number;
-    payload: string;
-}
 
 /**
  * 组播管理器
@@ -36,29 +28,18 @@ export class MulticastManager {
     private connectionCallback: ConnectionCallback | null = null;
     private isShutdown = false;
 
-    // === 消息管理 ===
-    private messageSequence = 0;
-    private receivedMessages = new Map<string, number>(); // 消息去重
-    private readonly maxReceivedMessagesSize = 500; // 最大缓存消息数量
-    private readonly messageTimeoutMs = 15000; // 消息超时时间（30秒）
-
     // === 定时器 ===
     private reconnectTimer: NodeJS.Timeout | null = null;
     private cleanupTimer: NodeJS.Timeout | null = null;
 
-    // === 本机标识 ===
-    private readonly localIdentifier: string;
-
     constructor(logger: Logger, messageProcessor: MessageProcessor) {
         this.logger = logger;
         this.messageProcessor = messageProcessor;
-        this.localIdentifier = this.generateLocalIdentifier();
         this.multicastPort = vscode.workspace.getConfiguration('vscode-jetbrains-sync').get('port', 3000);
 
         this.logger.info(`初始化组播管理器 - 地址: ${this.multicastAddress}:${this.multicastPort}`);
 
         this.setupConfigurationListener();
-        this.startMessageCleanupTask();
     }
 
     // ==================== 初始化相关方法 ====================
@@ -75,20 +56,6 @@ export class MulticastManager {
     }
 
     /**
-     * 生成本机唯一标识
-     */
-    private generateLocalIdentifier(): string {
-        try {
-            const hostname = os.hostname();
-            const pid = process.pid;
-            const timestamp = Date.now();
-            return `${hostname}-${pid}-${timestamp}`;
-        } catch (e) {
-            return `unknown-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
-        }
-    }
-
-    /**
      * 处理配置变更
      */
     private updateMulticastPort(): void {
@@ -101,17 +68,6 @@ export class MulticastManager {
                 this.restartConnection();
             }
         }
-    }
-
-    /**
-     * 启动消息清理定时任务
-     */
-    private startMessageCleanupTask(): void {
-        this.cleanupTimer = setInterval(() => {
-            if (!this.isShutdown) {
-                this.cleanupOldMessages();
-            }
-        }, 60000); // 每分钟清理一次
     }
 
     // ==================== 公共接口方法 ====================
@@ -295,91 +251,26 @@ export class MulticastManager {
      */
     private handleReceivedMessage(message: string): void {
         try {
-            const messageData = this.parseMessageData(message);
-            if (!messageData) return;
-
-            // 检查是否是自己发送的消息
-            if (this.isOwnMessage(messageData)) {
-                this.logger.debug('忽略自己发送的消息');
-                return;
-            }
             this.logger.info(`收到组播消息: ${message}`);
-
-
-            // 检查消息去重
-            if (this.isDuplicateMessage(messageData)) {
-                this.logger.debug(`忽略重复消息: ${messageData.messageId}`);
-                return;
-            }
-
-            // 记录消息并处理
-            this.recordMessage(messageData);
-            this.processMessage(messageData);
-
+            this.messageProcessor.handleMessage(message, LocalIdentifierManager.getInstance().identifier);
         } catch (error) {
             this.logger.warn('处理接收到的消息时发生错误:', error as Error);
         }
     }
 
-    /**
-     * 检查是否是自己发送的消息
-     */
-    private isOwnMessage(messageData: MessageWrapper): boolean {
-        return messageData.senderId === this.localIdentifier;
-    }
-
-    /**
-     * 检查是否是重复消息
-     */
-    private isDuplicateMessage(messageData: MessageWrapper): boolean {
-        return this.receivedMessages.has(messageData.messageId);
-    }
-
-    /**
-     * 记录消息ID
-     */
-    private recordMessage(messageData: MessageWrapper): void {
-        this.receivedMessages.set(messageData.messageId, Date.now());
-
-        if (this.receivedMessages.size > this.maxReceivedMessagesSize) {
-            this.cleanupOldMessages();
-        }
-    }
-
-    /**
-     * 处理消息内容
-     */
-    private processMessage(messageData: MessageWrapper): void {
-        if (messageData.payload) {
-            this.messageProcessor.handleIncomingMessage(messageData.payload);
-        }
-    }
-
-    /**
-     * 解析消息数据
-     */
-    private parseMessageData(message: string): MessageWrapper | null {
-        try {
-            return JSON.parse(message) as MessageWrapper;
-        } catch (error) {
-            this.logger.warn('解析消息包装器失败:', error as Error);
-            return null;
-        }
-    }
 
     /**
      * 发送消息到组播组
      */
-    sendMessage(message: string): boolean {
+    sendMessage(messageWrapper: MessageWrapper): boolean {
         if (!this.isConnected() || !this.autoReconnect) {
-            this.logger.warn(`当前未连接，丢弃消息: ${message}`);
+            this.logger.warn(`当前未连接，丢弃消息: ${messageWrapper.toJsonString()}`);
             return false;
         }
 
         try {
-            const messageId = this.generateMessageId();
-            const wrappedMessage = this.wrapMessage(message, messageId);
-            const messageBuffer = Buffer.from(wrappedMessage, 'utf8');
+            const messageString = messageWrapper.toJsonString();
+            const messageBuffer = Buffer.from(messageString, 'utf8');
 
             if (messageBuffer.length > this.maxMessageSize) {
                 this.logger.warn(`消息过大，无法发送: ${messageBuffer.length} bytes`);
@@ -397,7 +288,7 @@ export class MulticastManager {
                         this.logger.warn('发送组播消息失败:', error);
                         this.handleConnectionError();
                     } else {
-                        this.logger.info(`✅ 发送组播消息: ${message}`);
+                        this.logger.info(`✅ 发送组播消息: ${messageString}`);
                     }
                 }
             );
@@ -409,43 +300,6 @@ export class MulticastManager {
             this.handleConnectionError();
             return false;
         }
-    }
-
-    /**
-     * 生成消息ID
-     */
-    private generateMessageId(): string {
-        this.messageSequence++;
-        const timestamp = Date.now();
-        return `${this.localIdentifier}-${this.messageSequence}-${timestamp}`;
-    }
-
-    /**
-     * 包装消息
-     */
-    private wrapMessage(payload: string, messageId: string): string {
-        const wrapper = {
-            messageId,
-            senderId: this.localIdentifier,
-            timestamp: Date.now(),
-            payload
-        };
-        return JSON.stringify(wrapper);
-    }
-
-    /**
-     * 清理过期消息
-     */
-    private cleanupOldMessages(): void {
-        const currentTime = Date.now();
-
-        for (const [messageId, timestamp] of this.receivedMessages.entries()) {
-            if (currentTime - timestamp > this.messageTimeoutMs) {
-                this.receivedMessages.delete(messageId);
-            }
-        }
-
-        this.logger.debug(`清理过期消息，当前缓存消息数: ${this.receivedMessages.size}`);
     }
 
     // ==================== 状态管理方法 ====================
@@ -555,9 +409,6 @@ export class MulticastManager {
             this.cleanupTimer = null;
         }
 
-        // 清理消息缓存
-        this.receivedMessages.clear();
-
         this.logger.info('组播管理器资源清理完成');
     }
 
@@ -581,5 +432,9 @@ export class MulticastManager {
 
     getConnectionState(): ConnectionState {
         return this.connectionState;
+    }
+
+    getLocalIdentifier(): string {
+        return LocalIdentifierManager.getInstance().identifier;
     }
 } 

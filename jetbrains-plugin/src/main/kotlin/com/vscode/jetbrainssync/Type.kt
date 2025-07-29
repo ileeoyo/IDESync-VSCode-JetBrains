@@ -124,12 +124,12 @@ data class EditorState(
         } else if (isMacOS || isLinux) {
             // macOS/Linux: 确保使用正斜杠，保持Unix路径格式
             ideaPath = ideaPath.replace('\\', '/')
-            
+
             // 确保路径以 / 开头（Unix绝对路径）
             if (!ideaPath.startsWith('/')) {
                 ideaPath = "/$ideaPath"
             }
-            
+
             // 清理重复的斜杠
             ideaPath = ideaPath.replace(Regex("/+"), "/")
         }
@@ -166,4 +166,67 @@ interface ConnectionCallback {
     fun onDisconnected()
 
     fun onReconnecting()
+}
+
+/**
+ * 消息包装器数据类
+ * 用于组播消息的统一包装和处理
+ */
+data class MessageWrapper(
+    val messageId: String,
+    val senderId: String,
+    val timestamp: Long,
+    val payload: EditorState
+) {
+    companion object {
+        private var messageSequence = java.util.concurrent.atomic.AtomicLong(0)
+        private val gson = com.google.gson.Gson()
+
+        /**
+         * 生成消息ID
+         * 格式: {localIdentifier}-{sequence}-{timestamp}
+         */
+        fun generateMessageId(localIdentifier: String): String {
+            val sequence = messageSequence.incrementAndGet()
+            val timestamp = System.currentTimeMillis()
+            return "$localIdentifier-$sequence-$timestamp"
+        }
+
+        /**
+         * 创建消息包装器
+         */
+        fun create(localIdentifier: String, payload: EditorState): MessageWrapper {
+            return MessageWrapper(
+                messageId = generateMessageId(localIdentifier),
+                senderId = localIdentifier,
+                timestamp = System.currentTimeMillis(),
+                payload = payload
+            )
+        }
+
+        /**
+         * 从JSON字符串解析MessageWrapper
+         */
+        fun fromJsonString(jsonString: String): MessageWrapper? {
+            return try {
+                gson.fromJson(jsonString, MessageWrapper::class.java)
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
+    /**
+     * 转换为JSON字符串
+     */
+    fun toJsonString(): String {
+        return MessageWrapper.gson.toJson(this)
+    }
+
+    /**
+     * 检查是否是自己发送的消息
+     */
+    fun isOwnMessage(localIdentifier: String): Boolean {
+        return senderId == localIdentifier
+    }
 }
