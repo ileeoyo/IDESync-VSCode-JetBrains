@@ -3,6 +3,7 @@ import * as path from 'path';
 import {ActionType, EditorState, SourceType} from './Type';
 import {Logger} from './Logger';
 import {FileUtils} from './FileUtils';
+import {EditorStateManager} from './EditorStateManager';
 
 /**
  * 文件操作处理器
@@ -10,9 +11,11 @@ import {FileUtils} from './FileUtils';
  */
 export class FileOperationHandler {
     private logger: Logger;
+    private editorStateManager: EditorStateManager;
 
-    constructor(logger: Logger) {
+    constructor(logger: Logger, editorStateManager: EditorStateManager) {
         this.logger = logger;
+        this.editorStateManager = editorStateManager;
     }
 
 
@@ -53,11 +56,7 @@ export class FileOperationHandler {
 
         try {
             // 如果当前编辑器活跃，保存当前编辑器状态
-            let savedActiveEditorState: EditorState | null = null;
-            if (this.isCurrentEditorActive()) {
-                savedActiveEditorState = this.getCurrentActiveEditorState();
-                this.logger.info(`保存当前活跃编辑器状态: ${savedActiveEditorState?.filePath}`);
-            }
+            let savedActiveEditorState: EditorState | null = this.getCurrentActiveEditorState();
 
             // 获取当前所有打开的文件
             const currentOpenedFiles = this.getCurrentOpenedFiles();
@@ -84,10 +83,14 @@ export class FileOperationHandler {
             }
 
             // 恢复之前保存的活跃编辑器状态，或处理指定的活跃文件
-            if (savedActiveEditorState) {
+            if (this.isCurrentEditorActive() && savedActiveEditorState) {
                 this.logger.info(`恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}`);
                 await this.handleFileOpenOrNavigate(savedActiveEditorState);
-            } else if (state.filePath && !this.isCurrentEditorActive()) {
+
+                // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
+                this.editorStateManager.sendCurrentState(true);
+                this.logger.info('已发送当前活跃编辑器状态给其他编辑器');
+            } else {
                 await this.handleFileOpenOrNavigate(state);
             }
 

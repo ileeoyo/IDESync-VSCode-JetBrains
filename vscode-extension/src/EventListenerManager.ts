@@ -106,7 +106,7 @@ export class EventListenerManager {
                     const state = this.editorStateManager.createEditorState(
                         event.textEditor, ActionType.NAVIGATE, this.isActive
                     );
-                    this.logger.info(`准备发送导航消息: ${state.filePath}`);
+                    this.logger.info(`准备发送导航消息: ${state}`);
                     this.editorStateManager.debouncedUpdateState(state);
                 }
             })

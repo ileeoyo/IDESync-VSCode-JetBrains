@@ -15,7 +15,8 @@ import java.io.File
  * 负责处理文件的打开、关闭和导航操作
  */
 class FileOperationHandler(
-    private val project: Project
+    private val project: Project,
+    private val editorStateManager: EditorStateManager
 ) {
     private val log: Logger = Logger.getInstance(FileOperationHandler::class.java)
 
@@ -58,11 +59,7 @@ class FileOperationHandler(
 
         try {
             // 如果当前编辑器活跃，保存当前编辑器状态
-            var savedActiveEditorState: EditorState? = null
-            if (isCurrentEditorActive()) {
-                savedActiveEditorState = getCurrentActiveEditorState()
-                log.info("保存当前活跃编辑器状态: ${savedActiveEditorState?.filePath}")
-            }
+            val savedActiveEditorState: EditorState? = getCurrentActiveEditorState()
 
             // 获取当前所有打开的文件
             val currentOpenedFiles = getCurrentOpenedFiles()
@@ -89,10 +86,14 @@ class FileOperationHandler(
             }
 
             // 恢复之前保存的活跃编辑器状态，或处理指定的活跃文件
-            if (savedActiveEditorState != null) {
+            if (isCurrentEditorActive() && savedActiveEditorState != null) {
                 log.info("恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}")
                 handleFileOpenOrNavigate(savedActiveEditorState)
-            } else if (state.filePath.isNotEmpty() && !isCurrentEditorActive()) {
+
+                // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
+                editorStateManager.sendCurrentState(true)
+                log.info("已发送当前活跃编辑器状态给其他编辑器")
+            } else {
                 handleFileOpenOrNavigate(state)
             }
 
