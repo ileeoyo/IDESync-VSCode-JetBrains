@@ -148,7 +148,7 @@ export class EditorStateManager {
      * 获取当前活跃编辑器的状态并发送
      */
     sendCurrentState(isActive: boolean) {
-        const currentState = this.getCurrentActiveEditorState();
+        const currentState = this.getCurrentActiveEditorState(isActive);
         if (currentState) {
             this.updateState(currentState);
             this.logger.info(`发送当前状态: ${currentState.filePath}`);
@@ -158,7 +158,7 @@ export class EditorStateManager {
     /**
      * 获取当前活跃编辑器的状态
      */
-    getCurrentActiveEditorState(): EditorState | null {
+    getCurrentActiveEditorState(isActive: boolean): EditorState | null {
         try {
             const activeEditor = vscode.window.activeTextEditor;
             if (!activeEditor) {
@@ -172,7 +172,7 @@ export class EditorStateManager {
                 position.line,
                 position.character,
                 SourceType.VSCODE,
-                true,
+                isActive,
                 formatTimestamp()
             );
         } catch (error) {

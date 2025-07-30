@@ -3,7 +3,6 @@ package com.vscode.jetbrainssync
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.TextEditor
-import com.intellij.openapi.project.Project
 import java.io.File
 
 /**
@@ -11,7 +10,6 @@ import java.io.File
  * 负责处理文件的打开、关闭和导航操作
  */
 class FileOperationHandler(
-    private val project: Project,
     private val editorStateManager: EditorStateManager,
     private val windowStateManager: WindowStateManager
 ) {
@@ -59,7 +57,7 @@ class FileOperationHandler(
             var currentActiveState = isCurrentEditorActive();
             log.info("当前编辑器活跃状态: $currentActiveState");
             // 如果当前编辑器活跃，保存当前编辑器状态
-            val savedActiveEditorState: EditorState? = editorStateManager.getCurrentActiveEditorState()
+            val savedActiveEditorState: EditorState? = editorStateManager.getCurrentActiveEditorState(windowStateManager.isWindowActive(forceRealTime = true))
             log.info("保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}");
 
             // 获取当前所有打开的文件

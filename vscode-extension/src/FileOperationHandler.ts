@@ -62,7 +62,7 @@ export class FileOperationHandler {
             let currentActiveState = await this.isCurrentEditorActive();
             this.logger.info(`当前编辑器活跃状态: ${currentActiveState}`);
             // 如果当前编辑器活跃，保存当前编辑器状态
-            let savedActiveEditorState: EditorState | null = this.editorStateManager.getCurrentActiveEditorState();
+            let savedActiveEditorState: EditorState | null = this.editorStateManager.getCurrentActiveEditorState(this.windowStateManager.isWindowActive(true));
             this.logger.info(`保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}`);
 
             // 获取当前所有打开的文件
@@ -124,12 +124,6 @@ export class FileOperationHandler {
             this.logger.warn('处理接收状态失败:', error as Error);
         }
     }
-
-
-
-
-
-
 
 
     /**

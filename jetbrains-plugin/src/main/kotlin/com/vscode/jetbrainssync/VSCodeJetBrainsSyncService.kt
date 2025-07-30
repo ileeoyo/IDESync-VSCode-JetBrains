@@ -26,7 +26,7 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     private val windowStateManager = WindowStateManager(project)
     private val editorStateManager = EditorStateManager(project)
     private val eventListenerManager = EventListenerManager(project, editorStateManager, windowStateManager)
-    private val fileOperationHandler = FileOperationHandler(project, editorStateManager, windowStateManager)
+    private val fileOperationHandler = FileOperationHandler(editorStateManager, windowStateManager)
     private val messageProcessor = MessageProcessor(fileOperationHandler)
     private val multicastManager = MulticastManager(project, messageProcessor)
     private val operationQueueProcessor = OperationQueueProcessor(multicastManager)

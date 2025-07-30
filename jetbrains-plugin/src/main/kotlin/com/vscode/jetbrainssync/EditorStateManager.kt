@@ -5,12 +5,9 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.ide.progress.ModalTaskOwner.project
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import javax.swing.Timer
-import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 /**
@@ -174,7 +171,7 @@ class EditorStateManager(
      * 发送当前状态
      */
     fun sendCurrentState(isActive: Boolean) {
-        val currentState = getCurrentActiveEditorState();
+        val currentState = getCurrentActiveEditorState(isActive);
         if (currentState != null) {
             this.updateState(currentState)
             log.info("发送当前状态: ${currentState.filePath}")
@@ -184,7 +181,7 @@ class EditorStateManager(
     /**
      * 获取当前活跃编辑器的状态
      */
-    fun getCurrentActiveEditorState(): EditorState? {
+    fun getCurrentActiveEditorState(isActive: Boolean): EditorState? {
         return try {
             val fileEditorManager = FileEditorManager.getInstance(project)
             val selectedEditor = fileEditorManager.selectedTextEditor
@@ -198,7 +195,7 @@ class EditorStateManager(
                     line = position.line,
                     column = position.column,
                     source = SourceType.JETBRAINS,
-                    isActive = true,
+                    isActive = isActive,
                     timestamp = formatTimestamp()
                 )
             } else {
