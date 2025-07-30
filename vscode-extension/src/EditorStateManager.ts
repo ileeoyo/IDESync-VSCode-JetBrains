@@ -61,7 +61,6 @@ export class EditorStateManager {
     }
 
 
-
     /**
      * 创建工作区同步状态
      */
@@ -149,13 +148,10 @@ export class EditorStateManager {
      * 获取当前活跃编辑器的状态并发送
      */
     sendCurrentState(isActive: boolean) {
-        const activeEditor = vscode.window.activeTextEditor;
-        if (activeEditor) {
-            const state = this.createEditorState(
-                activeEditor, ActionType.NAVIGATE, isActive
-            );
-            this.updateState(state);
-            this.logger.info(`发送当前状态: ${activeEditor.document.uri.fsPath}`);
+        const currentState = this.getCurrentActiveEditorState();
+        if (currentState) {
+            this.updateState(currentState);
+            this.logger.info(`发送当前状态: ${currentState.filePath}`);
         }
     }
 

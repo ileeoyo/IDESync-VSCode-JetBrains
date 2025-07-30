@@ -78,7 +78,6 @@ class EditorStateManager(
     }
 
 
-
     /**
      * 创建工作区同步状态
      */
@@ -175,15 +174,10 @@ class EditorStateManager(
      * 发送当前状态
      */
     fun sendCurrentState(isActive: Boolean) {
-        val editor = FileEditorManager.getInstance(project).selectedTextEditor
-        val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
-
-        if (editor != null && file != null) {
-            val state = this.createEditorState(
-                editor, file, ActionType.NAVIGATE, isActive
-            )
-            this.updateState(state)
-            log.info("发送当前状态: ${file.path}")
+        val currentState = getCurrentActiveEditorState();
+        if (currentState != null) {
+            this.updateState(currentState)
+            log.info("发送当前状态: ${currentState.filePath}")
         }
     }
 
