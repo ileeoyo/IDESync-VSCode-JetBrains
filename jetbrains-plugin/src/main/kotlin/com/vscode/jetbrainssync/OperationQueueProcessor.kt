@@ -1,7 +1,6 @@
 package com.vscode.jetbrainssync
 
 import com.intellij.openapi.diagnostic.Logger
-
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
@@ -14,7 +13,6 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 包含队列容量管理和操作添加逻辑
  */
 class OperationQueueProcessor(
-    private val messageProcessor: MessageProcessor,
     private val multicastManager: MulticastManager,
 ) {
     private val log: Logger = Logger.getInstance(OperationQueueProcessor::class.java)
@@ -96,11 +94,10 @@ class OperationQueueProcessor(
      * 发送状态更新
      */
     private fun sendStateUpdate(state: EditorState) {
-        val message = messageProcessor.serializeState(state)
-        if (message.isEmpty()) {
-            return
-        }
-        val success = multicastManager.sendMessage(message)
+        val messageWrapper = MessageWrapper.create(
+            LocalIdentifierManager.identifier, state
+        )
+        val success = multicastManager.sendMessage(messageWrapper)
         if (success) {
             log.info("✅ 发送组播消息：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}")
         } else {

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
-import {ActionType, SourceType, EditorState, formatTimestamp} from './Type';
+import {ActionType, EditorState, formatTimestamp, SourceType} from './Type';
 import {Logger} from "./Logger";
+import {FileUtils} from './FileUtils';
 
 /**
  * 编辑器状态管理器
@@ -34,13 +35,13 @@ export class EditorStateManager {
         action: ActionType,
         isActive: boolean
     ): EditorState {
-        const position = editor.selection.active;
+        const position = FileUtils.getEditorCursorPosition(editor);
 
         return new EditorState(
             action,
-            editor.document.uri.fsPath,
+            FileUtils.getEditorFilePath(editor),
             position.line,
-            position.character,
+            position.column,
             SourceType.VSCODE,
             isActive,
             formatTimestamp()
@@ -57,6 +58,41 @@ export class EditorStateManager {
             isActive,
             formatTimestamp()
         );
+    }
+
+
+    /**
+     * 创建工作区同步状态
+     */
+    createWorkspaceSyncState(isActive: boolean): EditorState {
+        const activeEditor = FileUtils.getCurrentActiveEditor();
+        const openedFiles = FileUtils.getAllOpenedFiles();
+
+        if (activeEditor) {
+            const position = FileUtils.getEditorCursorPosition(activeEditor);
+            return new EditorState(
+                ActionType.WORKSPACE_SYNC,
+                FileUtils.getEditorFilePath(activeEditor),
+                position.line,
+                position.column,
+                SourceType.VSCODE,
+                isActive,
+                formatTimestamp(),
+                openedFiles
+            );
+        } else {
+            // 没有活跃编辑器时，使用空的文件路径和位置
+            return new EditorState(
+                ActionType.WORKSPACE_SYNC,
+                '',
+                0,
+                0,
+                SourceType.VSCODE,
+                isActive,
+                formatTimestamp(),
+                openedFiles
+            );
+        }
     }
 
     /**
@@ -91,7 +127,7 @@ export class EditorStateManager {
                 this.debounceTimers.delete(filePath);
             }
         }, this.debounceDelayMs);
-        
+
         this.debounceTimers.set(filePath, timer);
     }
 
@@ -112,13 +148,36 @@ export class EditorStateManager {
      * 获取当前活跃编辑器的状态并发送
      */
     sendCurrentState(isActive: boolean) {
-        const activeEditor = vscode.window.activeTextEditor;
-        if (activeEditor) {
-            const state = this.createEditorState(
-                activeEditor, ActionType.NAVIGATE, isActive
+        const currentState = this.getCurrentActiveEditorState(isActive);
+        if (currentState) {
+            this.updateState(currentState);
+            this.logger.info(`发送当前状态: ${currentState.filePath}`);
+        }
+    }
+
+    /**
+     * 获取当前活跃编辑器的状态
+     */
+    getCurrentActiveEditorState(isActive: boolean): EditorState | null {
+        try {
+            const activeEditor = FileUtils.getCurrentActiveEditor();
+            if (!activeEditor) {
+                return null;
+            }
+
+            const position = FileUtils.getEditorCursorPosition(activeEditor);
+            return new EditorState(
+                ActionType.NAVIGATE,
+                FileUtils.getEditorFilePath(activeEditor),
+                position.line,
+                position.column,
+                SourceType.VSCODE,
+                isActive,
+                formatTimestamp()
             );
-            this.updateState(state);
-            this.logger.info(`发送当前状态: ${activeEditor.document.uri.fsPath}`);
+        } catch (error) {
+            this.logger.warn('获取当前活跃编辑器状态失败:', error as Error);
+            return null;
         }
     }
 
@@ -127,14 +186,14 @@ export class EditorStateManager {
      */
     dispose() {
         this.logger.info("开始清理编辑器状态管理器资源")
-        
+
         // 清理所有防抖定时器
         for (const [filePath, timer] of this.debounceTimers) {
             clearTimeout(timer);
             this.logger.debug(`清理防抖定时器: ${filePath}`);
         }
         this.debounceTimers.clear();
-        
+
         this.logger.info("编辑器状态管理器资源清理完成")
     }
 }

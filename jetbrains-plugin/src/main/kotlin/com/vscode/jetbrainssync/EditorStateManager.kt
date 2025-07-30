@@ -2,15 +2,11 @@ package com.vscode.jetbrainssync
 
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
-import com.intellij.platform.ide.progress.ModalTaskOwner.project
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import javax.swing.Timer
-import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 /**
@@ -24,7 +20,7 @@ class EditorStateManager(
 
     // 按文件路径分组的防抖定时器
     private val debounceTimers: ConcurrentHashMap<String, Timer> = ConcurrentHashMap()
-    
+
     // 读写锁，保护定时器操作的原子性
     private val timersLock = ReentrantReadWriteLock()
 
@@ -51,11 +47,12 @@ class EditorStateManager(
         action: ActionType,
         isActive: Boolean = false
     ): EditorState {
+        val (line, column) = FileUtils.getEditorCursorPosition(editor)
         return EditorState(
             action = action,
-            filePath = file.path,
-            line = editor.caretModel.logicalPosition.line,
-            column = editor.caretModel.logicalPosition.column,
+            filePath = FileUtils.getVirtualFilePath(file),
+            line = line,
+            column = column,
             source = SourceType.JETBRAINS,
             isActive = isActive,
             timestamp = formatTimestamp()
@@ -77,6 +74,41 @@ class EditorStateManager(
         )
     }
 
+
+    /**
+     * 创建工作区同步状态
+     */
+    fun createWorkspaceSyncState(isActive: Boolean = false): EditorState {
+        val (editor, file) = FileUtils.getCurrentActiveEditorAndFile()
+        val openedFiles = FileUtils.getAllOpenedFiles()
+
+        return if (editor != null && file != null && FileUtils.isRegularFile(file)) {
+            val (line, column) = FileUtils.getEditorCursorPosition(editor)
+            EditorState(
+                action = ActionType.WORKSPACE_SYNC,
+                filePath = file.path,
+                line = line,
+                column = column,
+                source = SourceType.JETBRAINS,
+                isActive = isActive,
+                timestamp = formatTimestamp(),
+                openedFiles = openedFiles
+            )
+        } else {
+            // 没有活跃编辑器时，使用空的文件路径和位置
+            EditorState(
+                action = ActionType.WORKSPACE_SYNC,
+                filePath = "",
+                line = 0,
+                column = 0,
+                source = SourceType.JETBRAINS,
+                isActive = isActive,
+                timestamp = formatTimestamp(),
+                openedFiles = openedFiles
+            )
+        }
+    }
+
     /**
      * 清理指定文件路径的防抖定时器
      * 使用写锁确保操作原子性
@@ -96,7 +128,7 @@ class EditorStateManager(
      */
     fun debouncedUpdateState(state: EditorState) {
         val filePath = state.filePath
-        
+
         timersLock.write {
             // 清除该文件之前的防抖定时器
             val oldTimer = debounceTimers.remove(filePath)
@@ -116,7 +148,7 @@ class EditorStateManager(
                 }
             }
             timer.isRepeats = false
-            
+
             debounceTimers[filePath] = timer
             timer.start()
         }
@@ -138,15 +170,37 @@ class EditorStateManager(
      * 发送当前状态
      */
     fun sendCurrentState(isActive: Boolean) {
-        val editor = FileEditorManager.getInstance(project).selectedTextEditor
-        val file = FileEditorManager.getInstance(project).selectedFiles.firstOrNull()
+        val currentState = getCurrentActiveEditorState(isActive);
+        if (currentState != null) {
+            this.updateState(currentState)
+            log.info("发送当前状态: ${currentState.filePath}")
+        }
+    }
 
-        if (editor != null && file != null) {
-            val state = this.createEditorState(
-                editor, file, ActionType.NAVIGATE, isActive
-            )
-            this.updateState(state)
-            log.info("发送当前状态: ${file.path}")
+    /**
+     * 获取当前活跃编辑器的状态
+     */
+    fun getCurrentActiveEditorState(isActive: Boolean): EditorState? {
+        return try {
+            val (editor, file) = FileUtils.getCurrentActiveEditorAndFile()
+
+            if (editor != null && file != null && FileUtils.isRegularFile(file)) {
+                val position = FileUtils.getEditorCursorPosition(editor)
+                EditorState(
+                    action = ActionType.NAVIGATE,
+                    filePath = FileUtils.getVirtualFilePath(file),
+                    line = position.first,
+                    column = position.second,
+                    source = SourceType.JETBRAINS,
+                    isActive = isActive,
+                    timestamp = formatTimestamp()
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            log.warn("获取当前活跃编辑器状态失败: ${e.message}", e)
+            null
         }
     }
 
@@ -155,7 +209,7 @@ class EditorStateManager(
      */
     fun dispose() {
         log.info("开始清理编辑器状态管理器资源")
-        
+
         timersLock.write {
             // 清理所有防抖定时器
             for ((filePath, timer) in debounceTimers) {
@@ -164,7 +218,7 @@ class EditorStateManager(
             }
             debounceTimers.clear()
         }
-        
+
         log.info("编辑器状态管理器资源清理完成")
     }
 }

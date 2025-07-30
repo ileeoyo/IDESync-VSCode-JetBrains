@@ -1,7 +1,7 @@
-import {ActionType, EditorState} from './Type';
+import {EditorState, MessageWrapper} from './Type';
 import {Logger} from './Logger';
 import {MulticastManager} from './MulticastManager';
-import {MessageProcessor} from "./MessageProcessor";
+import {LocalIdentifierManager} from './LocalIdentifierManager';
 
 /**
  * 操作队列处理器
@@ -9,7 +9,6 @@ import {MessageProcessor} from "./MessageProcessor";
  * 包含队列容量管理和操作添加逻辑
  */
 export class OperationQueueProcessor {
-    private messageProcessor: MessageProcessor;
     private logger: Logger;
     private multicastManager: MulticastManager;
     private processingInterval: NodeJS.Timeout | null = null;
@@ -22,11 +21,9 @@ export class OperationQueueProcessor {
     private isShutdown: boolean = false;
 
     constructor(
-        messageProcessor: MessageProcessor,
         logger: Logger,
         multicastManager: MulticastManager,
     ) {
-        this.messageProcessor = messageProcessor;
         this.logger = logger;
         this.multicastManager = multicastManager;
 
@@ -99,11 +96,12 @@ export class OperationQueueProcessor {
      * 发送状态更新
      */
     private sendStateUpdate(state: EditorState) {
-        const message = this.messageProcessor.serializeState(state);
-        if (!message) {
-            return;
-        }
-        const success = this.multicastManager.sendMessage(message);
+        const messageWrapper = MessageWrapper.create(
+            LocalIdentifierManager.getInstance().identifier,
+            state
+        );
+
+        const success = this.multicastManager.sendMessage(messageWrapper);
         if (success) {
             this.logger.info(`✅ 发送组播消息：${state.action} ${state.filePath}, 行${state.line}, 列${state.column}`)
         } else {

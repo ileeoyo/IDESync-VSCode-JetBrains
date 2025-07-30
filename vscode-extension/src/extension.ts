@@ -1,17 +1,20 @@
 import * as vscode from 'vscode';
-import {EditorState, ConnectionCallback, ConnectionState} from './Type';
+import {ConnectionCallback, ConnectionState, EditorState} from './Type';
 import {Logger} from './Logger';
+import {FileUtils} from './FileUtils';
 import {EditorStateManager} from './EditorStateManager';
 import {FileOperationHandler} from './FileOperationHandler';
 import {EventListenerManager} from './EventListenerManager';
 import {MessageProcessor} from './MessageProcessor';
 import {MulticastManager} from './MulticastManager';
 import {OperationQueueProcessor} from './OperationQueueProcessor';
+import {WindowStateManager} from './WindowStateManager';
 
 /**
  * VSCode与JetBrains同步类（重构版）
  *
  * 采用模块化设计，主要组件：
+ * - 窗口状态管理器：统一管理窗口活跃状态
  * - WebSocket服务器管理器：负责服务器管理和客户端连接
  * - 编辑器状态管理器：管理状态缓存、防抖和去重
  * - 文件操作处理器：处理文件的打开、关闭和导航
@@ -22,6 +25,7 @@ import {OperationQueueProcessor} from './OperationQueueProcessor';
 export class VSCodeJetBrainsSync {
     // 核心组件
     private logger: Logger;
+    private windowStateManager!: WindowStateManager;
     private editorStateManager!: EditorStateManager;
     private fileOperationHandler!: FileOperationHandler;
     private messageProcessor!: MessageProcessor;
@@ -40,7 +44,6 @@ export class VSCodeJetBrainsSync {
         this.initializeComponents();
         this.setupComponentCallbacks();
         this.eventListenerManager.setupEditorListeners();
-        this.eventListenerManager.setupWindowListeners();
 
         this.updateStatusBarWidget();
         this.statusBarItem.show();
@@ -52,13 +55,19 @@ export class VSCodeJetBrainsSync {
      * 初始化各个组件
      */
     private initializeComponents() {
+        // 首先初始化 FileUtils
+        FileUtils.initialize(this.logger);
+
+        this.windowStateManager = new WindowStateManager(this.logger);
+        this.windowStateManager.initialize();
+
         this.editorStateManager = new EditorStateManager(this.logger);
-        this.fileOperationHandler = new FileOperationHandler(this.logger);
+        this.eventListenerManager = new EventListenerManager(this.logger, this.editorStateManager, this.windowStateManager);
+        this.fileOperationHandler = new FileOperationHandler(this.logger, this.editorStateManager, this.windowStateManager);
         this.messageProcessor = new MessageProcessor(this.logger, this.fileOperationHandler);
         this.multicastManager = new MulticastManager(this.logger, this.messageProcessor);
-        this.eventListenerManager = new EventListenerManager(this.logger, this.editorStateManager);
         this.operationQueueProcessor = new OperationQueueProcessor(
-            this.messageProcessor, this.logger, this.multicastManager
+            this.logger, this.multicastManager
         );
     }
 
@@ -66,12 +75,22 @@ export class VSCodeJetBrainsSync {
      * 设置组件间的回调关系
      */
     private setupComponentCallbacks() {
+        // 窗口状态变化回调
+        this.windowStateManager.setOnWindowStateChangeCallback((isActive: boolean) => {
+            if (!isActive) {
+                // 窗口失焦时发送工作区同步状态
+                const workspaceSyncState = this.editorStateManager.createWorkspaceSyncState(true);
+                this.logger.info(`窗口失焦，发送工作区同步状态，包含${workspaceSyncState.openedFiles?.length || 0}个打开的文件`);
+                this.editorStateManager.updateState(workspaceSyncState);
+            }
+        });
+
         // 连接状态变化回调
         const connectionCallback: ConnectionCallback = {
             onConnected: () => {
                 this.logger.info('组播连接状态变更: 已连接');
                 this.updateStatusBarWidget();
-                this.editorStateManager.sendCurrentState(this.eventListenerManager.isActiveWindow());
+                this.editorStateManager.sendCurrentState(this.windowStateManager.isWindowActive());
             },
             onDisconnected: () => {
                 this.logger.info('组播连接状态变更: 已断开');
@@ -87,7 +106,7 @@ export class VSCodeJetBrainsSync {
 
         // 状态变化回调
         this.editorStateManager.setStateChangeCallback((state: EditorState) => {
-            if (this.eventListenerManager.isActiveWindow()) {
+            if (state.isActive) {
                 this.operationQueueProcessor.addOperation(state);
             }
         });
@@ -149,6 +168,7 @@ export class VSCodeJetBrainsSync {
         this.multicastManager.dispose();
         this.eventListenerManager.dispose();
         this.editorStateManager.dispose();
+        this.windowStateManager.dispose();
         this.statusBarItem.dispose();
         this.logger.dispose();
 

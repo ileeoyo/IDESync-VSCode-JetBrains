@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import WebSocket, {WebSocketServer, RawData} from 'ws';
-import {ActionType, EditorState, ConnectionCallback, ConnectionState} from './Type';
+import WebSocket, {RawData, WebSocketServer} from 'ws';
+import {ConnectionCallback, ConnectionState} from './Type';
 import {Logger} from './Logger';
 import {MessageProcessor} from './MessageProcessor';
 

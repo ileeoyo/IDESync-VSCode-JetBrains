@@ -3,25 +3,16 @@ package com.vscode.jetbrainssync
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import java.net.*
-import java.util.concurrent.*
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
-import kotlin.jvm.java
 
 // ==================== 内部数据类 ====================
 
-/**
- * 消息包装器数据类
- */
-private data class MessageWrapper(
-    val messageId: String,
-    val senderId: String,
-    val timestamp: Long,
-    val payload: String
-)
 
 /**
  * 组播管理器
@@ -48,12 +39,6 @@ class MulticastManager(
     private val autoReconnect = AtomicBoolean(false)
     private var connectionCallback: ConnectionCallback? = null
 
-    // ==================== 消息管理 ====================
-    private val messageSequence = AtomicLong(0)
-    private val receivedMessages = ConcurrentHashMap<String, Long>() // 消息去重
-    private val maxReceivedMessagesSize = 500 // 最大缓存消息数量
-    private val messageTimeoutMs = 15000L // 消息超时时间（30秒）
-
     // ==================== 线程管理 ====================
     private val executorService: ExecutorService = Executors.newCachedThreadPool { r ->
         val thread = Thread(r, "Multicast-Manager-Worker")
@@ -64,32 +49,13 @@ class MulticastManager(
     private val isShutdown = AtomicBoolean(false)
     private var receiverThread: Thread? = null
 
-    // ==================== 本机标识 ====================
-    private val localIdentifier = generateLocalIdentifier()
-
     init {
         // 从配置中读取组播端口（复用WebSocket端口配置）
         multicastPort = VSCodeJetBrainsSyncSettings.getInstance(project).state.port
         log.info("初始化组播管理器 - 地址: $multicastAddress:$multicastPort")
-        // 清理过期消息的定时任务
-        startMessageCleanupTask()
     }
 
     // ==================== 初始化相关方法 ====================
-
-    /**
-     * 生成本机唯一标识
-     */
-    private fun generateLocalIdentifier(): String {
-        return try {
-            val hostname = InetAddress.getLocalHost().hostName
-            val pid = ProcessHandle.current().pid()
-            val timestamp = System.currentTimeMillis()
-            "$hostname-$pid-$timestamp"
-        } catch (e: Exception) {
-            "unknown-${System.currentTimeMillis()}-${(Math.random() * 10000).toInt()}"
-        }
-    }
 
     /**
      * 更新组播端口配置
@@ -105,24 +71,6 @@ class MulticastManager(
             // 如果当前已启用自动重连，则重启连接
             if (this.autoReconnect.get()) {
                 this.restartConnection();
-            }
-        }
-    }
-
-    /**
-     * 启动消息清理定时任务
-     */
-    private fun startMessageCleanupTask() {
-        executorService.submit {
-            while (!isShutdown.get()) {
-                try {
-                    Thread.sleep(60000) // 每分钟清理一次
-                    cleanupOldMessages()
-                } catch (e: InterruptedException) {
-                    break
-                } catch (e: Exception) {
-                    log.warn("清理消息时发生错误: ${e.message}", e)
-                }
             }
         }
     }
@@ -319,59 +267,25 @@ class MulticastManager(
      */
     private fun handleReceivedMessage(message: String) {
         try {
-            log.info("收到组播消息: $message")
-
-            // 解析消息以检查发送者
-            val messageData = parseMessageData(message)
-
-            // 检查是否是自己发送的消息
-            if (messageData?.senderId == localIdentifier) {
-                log.debug("忽略自己发送的消息")
-                return
-            }
-
-            // 检查消息是否已经处理过（去重）
-            val messageId = messageData?.messageId
-            if (messageId != null) {
-                if (receivedMessages.containsKey(messageId)) {
-                    log.debug("忽略重复消息: $messageId")
-                    return
-                }
-
-                // 记录消息ID
-                val currentTime = System.currentTimeMillis()
-                receivedMessages[messageId] = currentTime
-
-                // 限制缓存大小
-                if (receivedMessages.size > maxReceivedMessagesSize) {
-                    cleanupOldMessages()
-                }
-            }
-
-            // 提取实际的编辑器状态消息
-            val editorStateMessage = messageData?.payload
-            if (editorStateMessage != null) {
-                messageProcessor.handleIncomingMessage(editorStateMessage)
-            }
-
+            messageProcessor.handleMessage(message, LocalIdentifierManager.identifier)
         } catch (e: Exception) {
             log.warn("处理接收到的消息时发生错误: ${e.message}", e)
         }
     }
 
+
     /**
      * 发送消息到组播组
      */
-    fun sendMessage(message: String): Boolean {
+    fun sendMessage(messageWrapper: MessageWrapper): Boolean {
         if (!isConnected() || !autoReconnect.get()) {
-            log.warn("当前未连接，丢弃消息: $message")
+            log.warn("当前未连接，丢弃消息: ${messageWrapper.toJsonString()}")
             return false
         }
 
         return try {
-            val messageId = generateMessageId()
-            val wrappedMessage = wrapMessage(message, messageId)
-            val messageBytes = wrappedMessage.toByteArray(Charsets.UTF_8)
+            val messageString = messageWrapper.toJsonString()
+            val messageBytes = messageString.toByteArray(Charsets.UTF_8)
 
             if (messageBytes.size > maxMessageSize) {
                 log.warn("消息过大，无法发送: ${messageBytes.size} bytes")
@@ -386,7 +300,7 @@ class MulticastManager(
             )
 
             multicastSocket?.send(packet)
-            log.info("✅ 发送组播消息: $message")
+            log.info("发送组播消息内容: $messageString")
             true
 
         } catch (e: Exception) {
@@ -394,58 +308,6 @@ class MulticastManager(
             handleConnectionError()
             false
         }
-    }
-
-    /**
-     * 生成消息ID
-     */
-    private fun generateMessageId(): String {
-        val sequence = messageSequence.incrementAndGet()
-        val timestamp = System.currentTimeMillis()
-        return "$localIdentifier-$sequence-$timestamp"
-    }
-
-    /**
-     * 包装消息
-     */
-    private fun wrapMessage(payload: String, messageId: String): String {
-        val wrapper = mapOf(
-            "messageId" to messageId,
-            "senderId" to localIdentifier,
-            "timestamp" to System.currentTimeMillis(),
-            "payload" to payload
-        )
-        return com.google.gson.Gson().toJson(wrapper)
-    }
-
-    /**
-     * 解析消息数据
-     */
-    private fun parseMessageData(message: String): MessageWrapper? {
-        return try {
-            val gson = com.google.gson.Gson()
-            gson.fromJson(message, MessageWrapper::class.java)
-        } catch (e: Exception) {
-            log.warn("解析消息包装器失败: ${e.message}")
-            null
-        }
-    }
-
-    /**
-     * 清理过期消息
-     */
-    private fun cleanupOldMessages() {
-        val currentTime = System.currentTimeMillis()
-        val iterator = receivedMessages.entries.iterator()
-
-        while (iterator.hasNext()) {
-            val entry = iterator.next()
-            if (currentTime - entry.value > messageTimeoutMs) {
-                iterator.remove()
-            }
-        }
-
-        log.debug("清理过期消息，当前缓存消息数: ${receivedMessages.size}")
     }
 
     // ==================== 状态管理方法 ====================
@@ -550,9 +412,6 @@ class MulticastManager(
             executorService.shutdownNow()
         }
 
-        // 清理消息缓存
-        receivedMessages.clear()
-
         log.info("组播管理器资源清理完成")
     }
 
@@ -563,5 +422,6 @@ class MulticastManager(
     fun isConnecting(): Boolean = connectionState.get() == ConnectionState.CONNECTING
     fun isDisconnected(): Boolean = connectionState.get() == ConnectionState.DISCONNECTED
     fun getConnectionState(): ConnectionState = connectionState.get()
+    fun getLocalIdentifier(): String = LocalIdentifierManager.identifier
 
 } 

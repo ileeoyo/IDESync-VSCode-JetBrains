@@ -1,5 +1,4 @@
-import * as vscode from 'vscode';
-import {ActionType, SourceType, EditorState, parseTimestamp} from './Type';
+import {EditorState, MessageWrapper, parseTimestamp} from './Type';
 import {Logger} from './Logger';
 import {FileOperationHandler} from './FileOperationHandler';
 
@@ -12,13 +11,120 @@ export class MessageProcessor {
     private fileOperationHandler: FileOperationHandler;
     private readonly messageTimeoutMs = 5000;
 
+    // 组播消息去重相关
+    private receivedMessages = new Map<string, number>();
+    private readonly maxReceivedMessagesSize = 1000;
+    private readonly messageCleanupIntervalMs = 300000; // 5分钟
+
+    // 定时清理相关
+    private isShutdown = false;
+    private cleanupTimer: NodeJS.Timeout | null = null;
+
     constructor(logger: Logger, fileOperationHandler: FileOperationHandler) {
         this.logger = logger;
         this.fileOperationHandler = fileOperationHandler;
+        this.startMessageCleanupTask();
     }
 
     /**
-     * 处理接收到的消息
+     * 启动消息清理定时任务
+     */
+    private startMessageCleanupTask(): void {
+        this.cleanupTimer = setInterval(() => {
+            if (!this.isShutdown) {
+                this.cleanupOldMessages();
+            }
+        }, 60000); // 每分钟清理一次
+    }
+
+    /**
+     * 停止消息清理定时任务
+     */
+    public stopMessageCleanupTask(): void {
+        this.isShutdown = true;
+        if (this.cleanupTimer) {
+            clearInterval(this.cleanupTimer);
+            this.cleanupTimer = null;
+        }
+    }
+
+    /**
+     * 处理组播消息
+     * 包含消息解析、去重检查、自己消息过滤等逻辑
+     */
+    handleMessage(message: string, localIdentifier: string): boolean {
+        try {
+            const messageData = this.parseMessageData(message);
+            if (!messageData) return false;
+
+            // 检查是否是自己发送的消息
+            if (messageData.isOwnMessage(localIdentifier)) {
+                this.logger.debug('忽略自己发送的消息');
+                return false;
+            }
+            this.logger.info(`收到组播消息: ${message}`);
+
+            // 检查消息去重
+            if (this.isDuplicateMessage(messageData)) {
+                this.logger.debug(`忽略重复消息: ${messageData.messageId}`);
+                return false;
+            }
+
+            // 记录消息并处理
+            this.recordMessage(messageData);
+            // 处理消息内容
+            this.handleIncomingState(messageData.payload);
+            return true;
+        } catch (error) {
+            this.logger.warn('处理组播消息时发生错误:', error as Error);
+            return false;
+        }
+    }
+
+    /**
+     * 解析消息数据
+     */
+    private parseMessageData(message: string): MessageWrapper | null {
+        return MessageWrapper.fromJsonString(message);
+    }
+
+    /**
+     * 检查是否是重复消息
+     */
+    private isDuplicateMessage(messageData: MessageWrapper): boolean {
+        return this.receivedMessages.has(messageData.messageId);
+    }
+
+    /**
+     * 记录消息ID
+     */
+    private recordMessage(messageData: MessageWrapper): void {
+        this.receivedMessages.set(messageData.messageId, Date.now());
+
+        if (this.receivedMessages.size > this.maxReceivedMessagesSize) {
+            this.cleanupOldMessages();
+        }
+    }
+
+
+    /**
+     * 清理过期的消息记录
+     */
+    private cleanupOldMessages(): void {
+        const currentTime = Date.now();
+        const expireTime = currentTime - this.messageCleanupIntervalMs;
+
+        for (const [messageId, timestamp] of this.receivedMessages.entries()) {
+            if (timestamp < expireTime) {
+                this.receivedMessages.delete(messageId);
+            }
+        }
+
+        this.logger.debug(`清理过期消息记录，剩余: ${this.receivedMessages.size}`);
+    }
+
+    /**
+     * 处理接收到的消息（兼容旧接口）
      */
     async handleIncomingMessage(message: string): Promise<void> {
         try {
@@ -33,13 +139,32 @@ export class MessageProcessor {
             }
 
             // 路由到文件操作处理器
-            this.fileOperationHandler.handleIncomingState(state)
+            await this.fileOperationHandler.handleIncomingState(state)
 
         } catch (error) {
             this.logger.warn(`解析消息失败: `, error as Error);
         }
     }
 
+    /**
+     * 处理接收到的状态（新接口）
+     */
+    private async handleIncomingState(state: EditorState): Promise<void> {
+        try {
+            this.logger.info(`🍕解析消息: ${state.action} ${this.serializeState(state)}`)
+
+            // 验证消息有效性
+            if (!this.isValidMessage(state)) {
+                return;
+            }
+
+            // 路由到文件操作处理器
+            await this.fileOperationHandler.handleIncomingState(state)
+
+        } catch (error) {
+            this.logger.warn(`处理状态失败: `, error as Error);
+        }
+    }
 
     /**
      * 将JSON对象反序列化为EditorState实例
@@ -52,7 +177,8 @@ export class MessageProcessor {
             rawData.column,
             rawData.source,
             rawData.isActive,
-            rawData.timestamp
+            rawData.timestamp,
+            rawData.openedFiles
         );
     }
 
@@ -81,7 +207,6 @@ export class MessageProcessor {
 
         return true;
     }
-
 
     /**
      * 序列化状态为消息

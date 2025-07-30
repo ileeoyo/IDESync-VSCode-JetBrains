@@ -6,7 +6,8 @@
 export enum ActionType {
     CLOSE = "CLOSE",        // 关闭文件
     OPEN = "OPEN",          // 打开文件
-    NAVIGATE = "NAVIGATE"   // 光标导航
+    NAVIGATE = "NAVIGATE",  // 光标导航
+    WORKSPACE_SYNC = "WORKSPACE_SYNC"  // 工作区状态同步
 }
 
 /**
@@ -40,6 +41,7 @@ export class EditorState {
     public source: SourceType;        // 消息来源枚举
     public isActive: boolean;         // IDE是否处于活跃状态
     public timestamp: string;         // 时间戳 (yyyy-MM-dd HH:mm:ss.SSS)
+    public openedFiles?: string[];    // 工作区所有打开的文件（仅WORKSPACE_SYNC类型使用）
 
     // 平台兼容路径缓存
     private _compatiblePath?: string;
@@ -51,7 +53,8 @@ export class EditorState {
         column: number,
         source: SourceType = SourceType.VSCODE,
         isActive: boolean = false,
-        timestamp: string = formatTimestamp()
+        timestamp: string = formatTimestamp(),
+        openedFiles?: string[]
     ) {
         this.action = action;
         this.filePath = filePath;
@@ -60,6 +63,7 @@ export class EditorState {
         this.source = source;
         this.isActive = isActive;
         this.timestamp = timestamp;
+        this.openedFiles = openedFiles;
     }
 
     /**
@@ -131,18 +135,18 @@ export class EditorState {
         } else if (isMacOS || isLinux) {
             // macOS/Linux: 确保使用正斜杠，移除Windows盘符格式
             vscodePath = vscodePath.replace(/\\/g, '/');
-            
+
             // 移除Windows盘符（如果存在）并转换为Unix路径
             if (/^[A-Za-z]:[\/\\]/.test(vscodePath)) {
                 // 例如: C:/Users/... -> /Users/... 或 c:\Users\... -> /Users/...
                 vscodePath = vscodePath.substring(2).replace(/\\/g, '/');
             }
-            
+
             // 确保路径以 / 开头
             if (!vscodePath.startsWith('/')) {
                 vscodePath = '/' + vscodePath;
             }
-            
+
             // 清理重复的斜杠
             vscodePath = vscodePath.replace(/\/+/g, '/');
         }
@@ -190,4 +194,88 @@ export interface ConnectionCallback {
     onDisconnected(): void;
 
     onReconnecting(): void;
+}
+
+/**
+ * 消息包装器类
+ * 用于组播消息的统一包装和处理
+ */
+export class MessageWrapper {
+    private static messageSequence = 0;
+
+    public messageId: string;
+    public senderId: string;
+    public timestamp: number;
+    public payload: EditorState;
+
+    constructor(messageId: string, senderId: string, timestamp: number, payload: EditorState) {
+        this.messageId = messageId;
+        this.senderId = senderId;
+        this.timestamp = timestamp;
+        this.payload = payload;
+    }
+
+    /**
+     * 生成消息ID
+     * 格式: {localIdentifier}-{sequence}-{timestamp}
+     */
+    static generateMessageId(localIdentifier: string): string {
+        MessageWrapper.messageSequence++;
+        const timestamp = Date.now();
+        return `${localIdentifier}-${MessageWrapper.messageSequence}-${timestamp}`;
+    }
+
+    /**
+     * 创建消息包装器
+     */
+    static create(localIdentifier: string, payload: EditorState): MessageWrapper {
+        return new MessageWrapper(
+            MessageWrapper.generateMessageId(localIdentifier),
+            localIdentifier,
+            Date.now(),
+            payload
+        );
+    }
+
+    /**
+     * 转换为JSON字符串
+     */
+    toJsonString(): string {
+        return JSON.stringify(this);
+    }
+
+    /**
+     * 从JSON字符串解析MessageWrapper
+     */
+    static fromJsonString(jsonString: string): MessageWrapper | null {
+        try {
+            const data = JSON.parse(jsonString);
+            const editorState = new EditorState(
+                data.payload.action,
+                data.payload.filePath,
+                data.payload.line,
+                data.payload.column,
+                data.payload.source,
+                data.payload.isActive,
+                data.payload.timestamp,
+                data.payload.openedFiles
+            );
+
+            return new MessageWrapper(
+                data.messageId,
+                data.senderId,
+                data.timestamp,
+                editorState
+            );
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /**
+     * 检查是否是自己发送的消息
+     */
+    isOwnMessage(localIdentifier: string): boolean {
+        return this.senderId === localIdentifier;
+    }
 }
