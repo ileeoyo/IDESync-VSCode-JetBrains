@@ -67,7 +67,7 @@ class FileOperationHandler(
             log.info("保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}");
 
             // 获取当前所有打开的文件
-            val currentOpenedFiles = getCurrentOpenedFiles()
+            val currentOpenedFiles = FileUtils.getAllOpenedFiles(project)
             val targetFiles = state.openedFiles.map { filePath ->
                 // 创建临时EditorState以使用路径转换逻辑
                 val tempState = EditorState(ActionType.OPEN, filePath, 0, 0)
@@ -146,19 +146,7 @@ class FileOperationHandler(
         }
     }
 
-    /**
-     * 获取当前所有打开的文件路径
-     * 只返回常规文件标签，过滤掉特殊标签窗口
-     */
-    private fun getCurrentOpenedFiles(): List<String> {
-        val fileEditorManager = FileEditorManager.getInstance(project)
-        return fileEditorManager.openFiles
-            .filter { virtualFile ->
-                // 只保留常规文件编辑器，过滤掉所有特殊标签窗口
-                FileUtils.isRegularFileEditor(virtualFile)
-            }
-            .map { it.path }
-    }
+
 
 
     /**

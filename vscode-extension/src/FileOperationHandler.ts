@@ -66,7 +66,7 @@ export class FileOperationHandler {
             this.logger.info(`保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}`);
 
             // 获取当前所有打开的文件
-            const currentOpenedFiles = this.getCurrentOpenedFiles();
+            const currentOpenedFiles = FileUtils.getAllOpenedFiles();
             const targetFiles = state.openedFiles.map(filePath => {
                 // 创建临时EditorState以使用路径转换逻辑
                 const tempState = new EditorState(ActionType.OPEN, filePath, 0, 0);
@@ -143,28 +143,7 @@ export class FileOperationHandler {
         }
     }
 
-    /**
-     * 获取当前所有打开的文件路径
-     * 只返回常规文件标签，过滤掉特殊标签窗口
-     */
-    private getCurrentOpenedFiles(): string[] {
-        const openedFiles: string[] = [];
 
-        for (const tabGroup of vscode.window.tabGroups.all) {
-            for (const tab of tabGroup.tabs) {
-                // 只处理常规文本文件标签，过滤掉所有特殊标签类型
-                if (FileUtils.isRegularFileTab(tab)) {
-                    const tabInput = tab.input as vscode.TabInputText;
-                    const uri = tabInput.uri;
-
-                    // 文件协议已在 FileUtils.isRegularFileTab 中验证，直接添加
-                    openedFiles.push(uri.fsPath);
-                }
-            }
-        }
-
-        return openedFiles;
-    }
 
 
     /**

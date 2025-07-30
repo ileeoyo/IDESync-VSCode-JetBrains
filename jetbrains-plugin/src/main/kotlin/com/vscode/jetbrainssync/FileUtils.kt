@@ -1,5 +1,7 @@
 package com.vscode.jetbrainssync
 
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 
 /**
@@ -20,5 +22,19 @@ object FileUtils {
         )
 
         return allowedFileSystems.contains(fileSystem)
+    }
+
+    /**
+     * 获取当前所有打开的文件路径
+     * 只返回常规文件编辑器，过滤掉特殊标签窗口
+     */
+    fun getAllOpenedFiles(project: Project): List<String> {
+        val fileEditorManager = FileEditorManager.getInstance(project)
+        return fileEditorManager.openFiles
+            .filter { virtualFile ->
+                // 只保留常规文件编辑器，过滤掉所有特殊标签窗口
+                isRegularFileEditor(virtualFile)
+            }
+            .map { it.path }
     }
 } 

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import {ActionType, SourceType, EditorState, formatTimestamp} from './Type';
 import {Logger} from "./Logger";
+import {FileUtils} from './FileUtils';
 
 /**
  * 编辑器状态管理器
@@ -59,29 +60,14 @@ export class EditorStateManager {
         );
     }
 
-    /**
-     * 获取工作区所有打开的文件路径
-     */
-    getAllOpenedFiles(): string[] {
-        const openedFiles: string[] = [];
 
-        for (const tabGroup of vscode.window.tabGroups.all) {
-            for (const tab of tabGroup.tabs) {
-                if (tab.input instanceof vscode.TabInputText) {
-                    openedFiles.push(tab.input.uri.fsPath);
-                }
-            }
-        }
-
-        return openedFiles;
-    }
 
     /**
      * 创建工作区同步状态
      */
     createWorkspaceSyncState(isActive: boolean): EditorState {
         const activeEditor = vscode.window.activeTextEditor;
-        const openedFiles = this.getAllOpenedFiles();
+        const openedFiles = FileUtils.getAllOpenedFiles();
 
         if (activeEditor) {
             const position = activeEditor.selection.active;

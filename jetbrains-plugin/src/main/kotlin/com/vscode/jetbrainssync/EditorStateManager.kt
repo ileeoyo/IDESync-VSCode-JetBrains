@@ -77,13 +77,7 @@ class EditorStateManager(
         )
     }
 
-    /**
-     * 获取工作区所有打开的文件路径
-     */
-    fun getAllOpenedFiles(): List<String> {
-        val fileEditorManager = FileEditorManager.getInstance(project)
-        return fileEditorManager.openFiles.map { it.path }
-    }
+
 
     /**
      * 创建工作区同步状态
@@ -92,7 +86,7 @@ class EditorStateManager(
         val fileEditorManager = FileEditorManager.getInstance(project)
         val editor = fileEditorManager.selectedTextEditor
         val file = fileEditorManager.selectedFiles.firstOrNull()
-        val openedFiles = getAllOpenedFiles()
+        val openedFiles = FileUtils.getAllOpenedFiles(project)
 
         return if (editor != null && file != null) {
             EditorState(
