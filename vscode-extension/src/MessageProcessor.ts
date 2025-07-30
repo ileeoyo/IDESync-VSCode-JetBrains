@@ -140,7 +140,7 @@ export class MessageProcessor {
             }
 
             // 路由到文件操作处理器
-            this.fileOperationHandler.handleIncomingState(state)
+            await this.fileOperationHandler.handleIncomingState(state)
 
         } catch (error) {
             this.logger.warn(`解析消息失败: `, error as Error);
@@ -160,7 +160,7 @@ export class MessageProcessor {
             }
 
             // 路由到文件操作处理器
-            this.fileOperationHandler.handleIncomingState(state)
+            await this.fileOperationHandler.handleIncomingState(state)
 
         } catch (error) {
             this.logger.warn(`处理状态失败: `, error as Error);
