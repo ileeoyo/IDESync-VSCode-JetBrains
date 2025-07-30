@@ -300,7 +300,7 @@ class MulticastManager(
             )
 
             multicastSocket?.send(packet)
-            log.info("✅ 发送组播消息: $messageString")
+            log.info("发送组播消息内容: $messageString")
             true
 
         } catch (e: Exception) {

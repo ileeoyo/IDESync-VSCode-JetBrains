@@ -287,7 +287,7 @@ export class MulticastManager {
                         this.logger.warn('发送组播消息失败:', error);
                         this.handleConnectionError();
                     } else {
-                        this.logger.info(`✅ 发送组播消息: ${messageString}`);
+                        this.logger.info(`发送组播消息内容: ${messageString}`);
                     }
                 }
             );
