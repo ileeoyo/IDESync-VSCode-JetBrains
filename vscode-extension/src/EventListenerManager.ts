@@ -25,22 +25,7 @@ export class EventListenerManager {
         this.windowStateManager = windowStateManager;
     }
 
-    /**
-     * 检查文件是否在其他TAB中仍然打开
-     */
-    private isFileOpenInOtherTabs(filePath: string): boolean {
-        for (const tabGroup of vscode.window.tabGroups.all) {
-            for (const tab of tabGroup.tabs) {
-                if (FileUtils.isRegularFileTab(tab)) {
-                    const uri = (tab.input as vscode.TabInputText).uri;
-                    if (uri.fsPath === filePath) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
+
 
     /**
      * 设置编辑器监听器
@@ -77,7 +62,7 @@ export class EventListenerManager {
                         const filePath = uri.fsPath;
 
                         // 检查文件是否在其他TAB中仍然打开
-                        const isStillOpen = this.isFileOpenInOtherTabs(filePath);
+                        const isStillOpen = FileUtils.isFileOpenInOtherTabs(filePath);
                         if (isStillOpen) {
                             this.logger.info(`文件在其他TAB中仍然打开，跳过关闭消息: ${filePath}`);
                             return;

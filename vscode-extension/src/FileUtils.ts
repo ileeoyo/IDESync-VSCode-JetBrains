@@ -7,6 +7,23 @@ import * as vscode from 'vscode';
 export class FileUtils {
 
     /**
+     * 检查文件是否在其他TAB中仍然打开
+     */
+    static isFileOpenInOtherTabs(filePath: string): boolean {
+        for (const tabGroup of vscode.window.tabGroups.all) {
+            for (const tab of tabGroup.tabs) {
+                if (FileUtils.isRegularFileTab(tab)) {
+                    const uri = (tab.input as vscode.TabInputText).uri;
+                    if (uri.fsPath === filePath) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
      * 判断是否为常规文件标签（只允许常规文件协议）
      */
     static isRegularFileTab(tab: vscode.Tab): boolean {

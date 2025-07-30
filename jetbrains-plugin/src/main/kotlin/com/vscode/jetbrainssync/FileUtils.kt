@@ -11,6 +11,14 @@ import com.intellij.openapi.vfs.VirtualFile
 object FileUtils {
 
     /**
+     * 检查文件是否在其他编辑器中仍然打开
+     */
+    fun isFileOpenInOtherTabs(file: VirtualFile, project: Project): Boolean {
+        val fileEditorManager = FileEditorManager.getInstance(project)
+        return fileEditorManager.isFileOpen(file)
+    }
+
+    /**
      * 判断是否为常规文件编辑器（只允许常规文件系统）
      */
     fun isRegularFileEditor(virtualFile: VirtualFile): Boolean {

@@ -25,13 +25,7 @@ class EventListenerManager(
     private var currentEditor: Editor? = null
     private var messageBusConnection: MessageBusConnection? = null
 
-    /**
-     * 检查文件是否在其他编辑器中仍然打开
-     */
-    private fun isFileOpenInOtherTabs(file: VirtualFile): Boolean {
-        val fileEditorManager = FileEditorManager.getInstance(project)
-        return fileEditorManager.isFileOpen(file)
-    }
+
 
     /**
      * 设置编辑器监听器
@@ -67,7 +61,7 @@ class EventListenerManager(
                     log.info("事件-文件关闭: ${file.path}")
 
                     // 检查文件是否在其他编辑器中仍然打开
-                    val isStillOpen = isFileOpenInOtherTabs(file)
+                    val isStillOpen = FileUtils.isFileOpenInOtherTabs(file, project)
                     if (isStillOpen) {
                         log.info("文件在其他编辑器中仍然打开，跳过关闭消息: ${file.path}")
                         return
