@@ -64,6 +64,15 @@ export class FileUtils {
     }
 
     /**
+     * 检查编辑器是否为有效的常规文件编辑器
+     * @param editor 文本编辑器
+     * @returns 是否为常规文件编辑器
+     */
+    static isRegularFileEditor(editor: vscode.TextEditor): boolean {
+        return this.isRegularFileUri(editor.document.uri);
+    }
+
+    /**
      * 获取当前所有打开的文件路径
      * 只返回常规文件标签，过滤掉特殊标签窗口
      */
@@ -84,6 +93,56 @@ export class FileUtils {
         }
 
         return openedFiles;
+    }
+
+
+    /**
+     * 从文件路径提取文件名
+     * @param filePath 文件路径
+     * @returns 文件名
+     */
+    static extractFileName(filePath: string): string {
+        return path.basename(filePath);
+    }
+
+    /**
+     * 获取编辑器的文件路径
+     * @param editor 文本编辑器
+     * @returns 文件路径
+     */
+    static getEditorFilePath(editor: vscode.TextEditor): string {
+        return editor.document.uri.fsPath;
+    }
+
+    /**
+     * 获取编辑器的光标位置
+     * @param editor 文本编辑器
+     * @returns 光标位置 {line: number, column: number}
+     */
+    static getEditorCursorPosition(editor: vscode.TextEditor): { line: number, column: number } {
+        const position = editor.selection.active;
+        return {
+            line: position.line,
+            column: position.character
+        };
+    }
+
+    /**
+     * 获取当前活跃编辑器
+     * @returns 返回当前活跃的TextEditor，如果没有则返回null
+     */
+    static getCurrentActiveEditor(): vscode.TextEditor | null {
+        const activeEditor = vscode.window.activeTextEditor;
+        if (!activeEditor) {
+            return null;
+        }
+
+        // 只返回常规文件编辑器
+        if (!this.isRegularFileEditor(activeEditor)) {
+            return null;
+        }
+
+        return activeEditor;
     }
 
     /**
@@ -167,4 +226,5 @@ export class FileUtils {
             this.logger.info(`光标位置不可见，执行滚动到: 行${line}, 列${column}`);
         }
     }
+
 } 

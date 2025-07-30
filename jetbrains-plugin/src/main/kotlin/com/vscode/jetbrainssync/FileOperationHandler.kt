@@ -2,7 +2,6 @@ package com.vscode.jetbrainssync
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
-import java.io.File
 
 /**
  * 文件操作处理器
@@ -69,7 +68,7 @@ class FileOperationHandler(
 
             log.info("当前打开文件: ${currentOpenedFiles.size}个")
             log.info("目标文件: ${targetFiles.size}个")
-            log.info("当前打开的常规文件列表: ${currentOpenedFiles.joinToString(", ") { File(it).name }}")
+            log.info("当前打开的常规文件列表: ${currentOpenedFiles.joinToString(", ") { FileUtils.extractFileName(it) }}")
 
             // 关闭多余的文件（当前打开但目标中不存在的文件）
             val filesToClose = currentOpenedFiles.filter { file -> !targetFiles.contains(file) }

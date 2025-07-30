@@ -2,7 +2,6 @@ package com.vscode.jetbrainssync
 
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
 import java.util.concurrent.ConcurrentHashMap
@@ -48,11 +47,12 @@ class EditorStateManager(
         action: ActionType,
         isActive: Boolean = false
     ): EditorState {
+        val position = editor.caretModel.logicalPosition
         return EditorState(
             action = action,
-            filePath = file.path,
-            line = editor.caretModel.logicalPosition.line,
-            column = editor.caretModel.logicalPosition.column,
+            filePath = FileUtils.getVirtualFilePath(file),
+            line = position.line,
+            column = position.column,
             source = SourceType.JETBRAINS,
             isActive = isActive,
             timestamp = formatTimestamp()
@@ -79,12 +79,10 @@ class EditorStateManager(
      * 创建工作区同步状态
      */
     fun createWorkspaceSyncState(isActive: Boolean = false): EditorState {
-        val fileEditorManager = FileEditorManager.getInstance(project)
-        val editor = fileEditorManager.selectedTextEditor
-        val file = fileEditorManager.selectedFiles.firstOrNull()
+        val (editor, file) = FileUtils.getCurrentSelectedEditorAndFile()
         val openedFiles = FileUtils.getAllOpenedFiles()
 
-        return if (editor != null && file != null) {
+        return if (editor != null && file != null && FileUtils.isRegularFile(file)) {
             EditorState(
                 action = ActionType.WORKSPACE_SYNC,
                 filePath = file.path,
@@ -183,17 +181,15 @@ class EditorStateManager(
      */
     fun getCurrentActiveEditorState(isActive: Boolean): EditorState? {
         return try {
-            val fileEditorManager = FileEditorManager.getInstance(project)
-            val selectedEditor = fileEditorManager.selectedTextEditor
-            val selectedFile = fileEditorManager.selectedFiles.firstOrNull()
+            val (editor, file) = FileUtils.getCurrentSelectedEditorAndFile()
 
-            if (selectedEditor != null && selectedFile != null) {
-                val position = selectedEditor.caretModel.logicalPosition
+            if (editor != null && file != null && FileUtils.isRegularFile(file)) {
+                val position = FileUtils.getEditorCursorPosition(editor)
                 EditorState(
                     action = ActionType.NAVIGATE,
-                    filePath = selectedFile.path,
-                    line = position.line,
-                    column = position.column,
+                    filePath = FileUtils.getVirtualFilePath(file),
+                    line = position.first,
+                    column = position.second,
                     source = SourceType.JETBRAINS,
                     isActive = isActive,
                     timestamp = formatTimestamp()

@@ -2,6 +2,7 @@ package com.vscode.jetbrainssync
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.LogicalPosition
 import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.fileEditor.FileEditorManager
@@ -40,7 +41,7 @@ object FileUtils {
     /**
      * 判断是否为常规文件编辑器（只允许常规文件系统）
      */
-    fun isRegularFileEditor(virtualFile: VirtualFile): Boolean {
+    fun isRegularFile(virtualFile: VirtualFile): Boolean {
         val fileSystem = virtualFile.fileSystem.protocol
 
         // 白名单机制：只允许常规文件系统协议
@@ -60,9 +61,53 @@ object FileUtils {
         return fileEditorManager.openFiles
             .filter { virtualFile ->
                 // 只保留常规文件编辑器，过滤掉所有特殊标签窗口
-                isRegularFileEditor(virtualFile)
+                isRegularFile(virtualFile)
             }
             .map { it.path }
+    }
+
+
+    /**
+     * 从文件路径提取文件名
+     * @param filePath 文件路径
+     * @return 文件名
+     */
+    fun extractFileName(filePath: String): String {
+        return File(filePath).name
+    }
+
+    /**
+     * 获取编辑器的文件路径
+     * @param virtualFile 虚拟文件
+     * @return 文件路径
+     */
+    fun getVirtualFilePath(virtualFile: VirtualFile): String {
+        return virtualFile.path
+    }
+
+    /**
+     * 获取编辑器的光标位置
+     * @param editor 文本编辑器
+     * @return 光标位置 Pair<行号, 列号>
+     */
+    fun getEditorCursorPosition(editor: Editor): Pair<Int, Int> {
+        val position = editor.caretModel.logicalPosition
+        return Pair(position.line, position.column)
+    }
+
+
+    /**
+     * 获取当前选中的文件和编辑器
+     * @return Pair<TextEditor?, VirtualFile?> 编辑器和虚拟文件的组合
+     */
+    fun getCurrentSelectedEditorAndFile(): Pair<Editor?, VirtualFile?> {
+        val fileEditorManager = FileEditorManager.getInstance(project)
+        val selectedEditor = fileEditorManager.selectedTextEditor
+        val selectedFile = fileEditorManager.selectedFiles.firstOrNull()
+        if (selectedFile != null && isRegularFile(selectedFile)) {
+            return Pair(selectedEditor, selectedFile)
+        }
+        return Pair(null, null);
     }
 
     /**
@@ -162,4 +207,4 @@ object FileUtils {
             }
         }
     }
-} 
+}

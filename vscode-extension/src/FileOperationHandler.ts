@@ -1,4 +1,3 @@
-import * as path from 'path';
 import {ActionType, EditorState} from './Type';
 import {Logger} from './Logger';
 import {FileUtils} from './FileUtils';
@@ -74,7 +73,7 @@ export class FileOperationHandler {
 
             this.logger.info(`当前打开文件: ${currentOpenedFiles.length}个`);
             this.logger.info(`目标文件: ${targetFiles.length}个`);
-            this.logger.info(`当前打开的常规文件列表: ${currentOpenedFiles.map(f => path.basename(f)).join(', ')}`);
+            this.logger.info(`当前打开的常规文件列表: ${currentOpenedFiles.map(f => FileUtils.extractFileName(f)).join(', ')}`);
 
             // 关闭多余的文件（当前打开但目标中不存在的文件）
             const filesToClose = currentOpenedFiles.filter((file: string) => !targetFiles.includes(file));

@@ -35,13 +35,13 @@ export class EditorStateManager {
         action: ActionType,
         isActive: boolean
     ): EditorState {
-        const position = editor.selection.active;
+        const position = FileUtils.getEditorCursorPosition(editor);
 
         return new EditorState(
             action,
-            editor.document.uri.fsPath,
+            FileUtils.getEditorFilePath(editor),
             position.line,
-            position.character,
+            position.column,
             SourceType.VSCODE,
             isActive,
             formatTimestamp()
@@ -65,16 +65,16 @@ export class EditorStateManager {
      * 创建工作区同步状态
      */
     createWorkspaceSyncState(isActive: boolean): EditorState {
-        const activeEditor = vscode.window.activeTextEditor;
+        const activeEditor = FileUtils.getCurrentActiveEditor();
         const openedFiles = FileUtils.getAllOpenedFiles();
 
         if (activeEditor) {
-            const position = activeEditor.selection.active;
+            const position = FileUtils.getEditorCursorPosition(activeEditor);
             return new EditorState(
                 ActionType.WORKSPACE_SYNC,
-                activeEditor.document.uri.fsPath,
+                FileUtils.getEditorFilePath(activeEditor),
                 position.line,
-                position.character,
+                position.column,
                 SourceType.VSCODE,
                 isActive,
                 formatTimestamp(),
@@ -160,17 +160,17 @@ export class EditorStateManager {
      */
     getCurrentActiveEditorState(isActive: boolean): EditorState | null {
         try {
-            const activeEditor = vscode.window.activeTextEditor;
+            const activeEditor = FileUtils.getCurrentActiveEditor();
             if (!activeEditor) {
                 return null;
             }
 
-            const position = activeEditor.selection.active;
+            const position = FileUtils.getEditorCursorPosition(activeEditor);
             return new EditorState(
                 ActionType.NAVIGATE,
-                activeEditor.document.uri.fsPath,
+                FileUtils.getEditorFilePath(activeEditor),
                 position.line,
-                position.character,
+                position.column,
                 SourceType.VSCODE,
                 isActive,
                 formatTimestamp()

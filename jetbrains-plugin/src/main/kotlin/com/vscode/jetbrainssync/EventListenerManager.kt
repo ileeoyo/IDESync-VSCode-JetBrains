@@ -36,7 +36,7 @@ class EventListenerManager(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-                    if (!FileUtils.isRegularFileEditor(file)) {
+                    if (!FileUtils.isRegularFile(file)) {
                         log.info("事件-文件打开: ${file.path} - 非常规文件，已忽略")
                         return
                     }
@@ -53,7 +53,7 @@ class EventListenerManager(
                 }
 
                 override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
-                    if (!FileUtils.isRegularFileEditor(file)) {
+                    if (!FileUtils.isRegularFile(file)) {
                         log.info("事件-文件关闭: ${file.path} - 非常规文件，已忽略")
                         return
                     }
@@ -74,7 +74,7 @@ class EventListenerManager(
 
                 override fun selectionChanged(event: FileEditorManagerEvent) {
                     if (event.newFile != null) {
-                        if (!FileUtils.isRegularFileEditor(event.newFile!!)) {
+                        if (!FileUtils.isRegularFile(event.newFile!!)) {
                             log.info("事件-文件改变: ${event.newFile!!.path} - 非常规文件，已忽略")
                             return
                         }
@@ -112,7 +112,7 @@ class EventListenerManager(
                 // 动态获取当前真正的文件
                 val currentFile = event.editor.virtualFile
                 if (currentFile != null) {
-                    if (!FileUtils.isRegularFileEditor(currentFile)) {
+                    if (!FileUtils.isRegularFile(currentFile)) {
                         log.info("事件-光标改变: ${currentFile.path} - 非常规文件，已忽略")
                         return
                     }
