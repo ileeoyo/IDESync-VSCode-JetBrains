@@ -79,7 +79,7 @@ class EventListenerManager(
                             return
                         }
                         log.info("事件-文件改变: ${event.newFile!!.path}")
-                        val editor = FileEditorManager.getInstance(project).selectedTextEditor
+                        val (editor, _) = FileUtils.getCurrentActiveEditorAndFile()
                         editor?.let {
                             val state = editorStateManager.createEditorState(
                                 it, event.newFile!!, ActionType.NAVIGATE, windowStateManager.isWindowActive()

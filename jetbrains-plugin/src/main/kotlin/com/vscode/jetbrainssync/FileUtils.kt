@@ -100,7 +100,7 @@ object FileUtils {
      * 获取当前选中的文件和编辑器
      * @return Pair<TextEditor?, VirtualFile?> 编辑器和虚拟文件的组合
      */
-    fun getCurrentSelectedEditorAndFile(): Pair<Editor?, VirtualFile?> {
+    fun getCurrentActiveEditorAndFile(): Pair<Editor?, VirtualFile?> {
         val fileEditorManager = FileEditorManager.getInstance(project)
         val selectedEditor = fileEditorManager.selectedTextEditor
         val selectedFile = fileEditorManager.selectedFiles.firstOrNull()

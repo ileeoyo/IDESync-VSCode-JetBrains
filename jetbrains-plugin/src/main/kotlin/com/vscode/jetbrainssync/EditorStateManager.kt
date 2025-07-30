@@ -47,12 +47,12 @@ class EditorStateManager(
         action: ActionType,
         isActive: Boolean = false
     ): EditorState {
-        val position = editor.caretModel.logicalPosition
+        val (line, column) = FileUtils.getEditorCursorPosition(editor)
         return EditorState(
             action = action,
             filePath = FileUtils.getVirtualFilePath(file),
-            line = position.line,
-            column = position.column,
+            line = line,
+            column = column,
             source = SourceType.JETBRAINS,
             isActive = isActive,
             timestamp = formatTimestamp()
@@ -79,15 +79,16 @@ class EditorStateManager(
      * 创建工作区同步状态
      */
     fun createWorkspaceSyncState(isActive: Boolean = false): EditorState {
-        val (editor, file) = FileUtils.getCurrentSelectedEditorAndFile()
+        val (editor, file) = FileUtils.getCurrentActiveEditorAndFile()
         val openedFiles = FileUtils.getAllOpenedFiles()
 
         return if (editor != null && file != null && FileUtils.isRegularFile(file)) {
+            val (line, column) = FileUtils.getEditorCursorPosition(editor)
             EditorState(
                 action = ActionType.WORKSPACE_SYNC,
                 filePath = file.path,
-                line = editor.caretModel.logicalPosition.line,
-                column = editor.caretModel.logicalPosition.column,
+                line = line,
+                column = column,
                 source = SourceType.JETBRAINS,
                 isActive = isActive,
                 timestamp = formatTimestamp(),
@@ -181,7 +182,7 @@ class EditorStateManager(
      */
     fun getCurrentActiveEditorState(isActive: Boolean): EditorState? {
         return try {
-            val (editor, file) = FileUtils.getCurrentSelectedEditorAndFile()
+            val (editor, file) = FileUtils.getCurrentActiveEditorAndFile()
 
             if (editor != null && file != null && FileUtils.isRegularFile(file)) {
                 val position = FileUtils.getEditorCursorPosition(editor)

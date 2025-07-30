@@ -88,7 +88,7 @@ export class EventListenerManager {
                     return;
                 }
                 this.logger.info(`事件-文件改变: ${event.textEditor.document.uri.fsPath}`);
-                if (event.textEditor === vscode.window.activeTextEditor) {
+                if (event.textEditor === FileUtils.getCurrentActiveEditor()) {
                     const state = this.editorStateManager.createEditorState(
                         event.textEditor, ActionType.NAVIGATE, this.windowStateManager.isWindowActive()
                     );
