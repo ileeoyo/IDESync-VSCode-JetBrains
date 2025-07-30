@@ -62,7 +62,7 @@ export class FileOperationHandler {
             let currentActiveState = await this.isCurrentEditorActive();
             this.logger.info(`当前编辑器活跃状态: ${currentActiveState}`);
             // 如果当前编辑器活跃，保存当前编辑器状态
-            let savedActiveEditorState: EditorState | null = this.getCurrentActiveEditorState();
+            let savedActiveEditorState: EditorState | null = this.editorStateManager.getCurrentActiveEditorState();
             this.logger.info(`保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}`);
 
             // 获取当前所有打开的文件
@@ -209,30 +209,7 @@ export class FileOperationHandler {
         }
     }
 
-    /**
-     * 获取当前活跃编辑器的状态
-     */
-    private getCurrentActiveEditorState(): EditorState | null {
-        try {
-            const activeEditor = vscode.window.activeTextEditor;
-            if (!activeEditor) {
-                return null;
-            }
 
-            const position = activeEditor.selection.active;
-            return new EditorState(
-                ActionType.NAVIGATE,
-                activeEditor.document.uri.fsPath,
-                position.line,
-                position.character,
-                SourceType.VSCODE,
-                true
-            );
-        } catch (error) {
-            this.logger.warn('获取当前活跃编辑器状态失败:', error as Error);
-            return null;
-        }
-    }
 
     /**
      * 根据文件路径打开文件

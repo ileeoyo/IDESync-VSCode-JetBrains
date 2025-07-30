@@ -194,6 +194,35 @@ class EditorStateManager(
     }
 
     /**
+     * 获取当前活跃编辑器的状态
+     */
+    fun getCurrentActiveEditorState(): EditorState? {
+        return try {
+            val fileEditorManager = FileEditorManager.getInstance(project)
+            val selectedEditor = fileEditorManager.selectedTextEditor
+            val selectedFile = fileEditorManager.selectedFiles.firstOrNull()
+
+            if (selectedEditor != null && selectedFile != null) {
+                val position = selectedEditor.caretModel.logicalPosition
+                EditorState(
+                    action = ActionType.NAVIGATE,
+                    filePath = selectedFile.path,
+                    line = position.line,
+                    column = position.column,
+                    source = SourceType.JETBRAINS,
+                    isActive = true,
+                    timestamp = formatTimestamp()
+                )
+            } else {
+                null
+            }
+        } catch (e: Exception) {
+            log.warn("获取当前活跃编辑器状态失败: ${e.message}", e)
+            null
+        }
+    }
+
+    /**
      * 清理资源
      */
     fun dispose() {

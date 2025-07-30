@@ -63,7 +63,7 @@ class FileOperationHandler(
             var currentActiveState = isCurrentEditorActive();
             log.info("当前编辑器活跃状态: $currentActiveState");
             // 如果当前编辑器活跃，保存当前编辑器状态
-            val savedActiveEditorState: EditorState? = getCurrentActiveEditorState()
+            val savedActiveEditorState: EditorState? = editorStateManager.getCurrentActiveEditorState()
             log.info("保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}");
 
             // 获取当前所有打开的文件
@@ -211,33 +211,7 @@ class FileOperationHandler(
         return windowStateManager.isWindowActive(forceRealTime = true)
     }
 
-    /**
-     * 获取当前活跃编辑器的状态
-     */
-    private fun getCurrentActiveEditorState(): EditorState? {
-        return try {
-            val fileEditorManager = FileEditorManager.getInstance(project)
-            val selectedEditor = fileEditorManager.selectedTextEditor
-            val selectedFile = fileEditorManager.selectedFiles.firstOrNull()
 
-            if (selectedEditor != null && selectedFile != null) {
-                val position = selectedEditor.caretModel.logicalPosition
-                EditorState(
-                    action = ActionType.NAVIGATE,
-                    filePath = selectedFile.path,
-                    line = position.line,
-                    column = position.column,
-                    source = SourceType.JETBRAINS,
-                    isActive = true
-                )
-            } else {
-                null
-            }
-        } catch (e: Exception) {
-            log.warn("获取当前活跃编辑器状态失败: ${e.message}", e)
-            null
-        }
-    }
 
     /**
      * 根据文件路径打开文件

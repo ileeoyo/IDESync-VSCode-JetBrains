@@ -174,6 +174,32 @@ export class EditorStateManager {
     }
 
     /**
+     * 获取当前活跃编辑器的状态
+     */
+    getCurrentActiveEditorState(): EditorState | null {
+        try {
+            const activeEditor = vscode.window.activeTextEditor;
+            if (!activeEditor) {
+                return null;
+            }
+
+            const position = activeEditor.selection.active;
+            return new EditorState(
+                ActionType.NAVIGATE,
+                activeEditor.document.uri.fsPath,
+                position.line,
+                position.character,
+                SourceType.VSCODE,
+                true,
+                formatTimestamp()
+            );
+        } catch (error) {
+            this.logger.warn('获取当前活跃编辑器状态失败:', error as Error);
+            return null;
+        }
+    }
+
+    /**
      * 清理资源
      */
     dispose() {
