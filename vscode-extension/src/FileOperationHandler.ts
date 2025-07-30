@@ -58,8 +58,12 @@ export class FileOperationHandler {
         }
 
         try {
+            // 获取当前编辑器活跃状态
+            let currentActiveState = await this.isCurrentEditorActive();
+            this.logger.info(`当前编辑器活跃状态: ${currentActiveState}`);
             // 如果当前编辑器活跃，保存当前编辑器状态
             let savedActiveEditorState: EditorState | null = this.getCurrentActiveEditorState();
+            this.logger.info(`保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}`);
 
             // 获取当前所有打开的文件
             const currentOpenedFiles = this.getCurrentOpenedFiles();
@@ -85,9 +89,8 @@ export class FileOperationHandler {
                 await this.openFileByPath(fileToOpen);
             }
 
-            const currentActiveState = await this.isCurrentEditorActive();
-            this.logger.info(`当前编辑器活跃状态: ${currentActiveState}`);
-            this.logger.info(`之前保存的活跃编辑器状态: ${savedActiveEditorState?.filePath}`);
+            // 再次获取当前编辑器活跃状态（防止状态延迟变更）
+            currentActiveState = await this.isCurrentEditorActive();
             if (currentActiveState && savedActiveEditorState) {
                 this.logger.info(`恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}`);
                 await this.handleFileOpenOrNavigate(savedActiveEditorState);

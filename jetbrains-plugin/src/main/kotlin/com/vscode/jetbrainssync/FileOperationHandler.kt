@@ -59,8 +59,12 @@ class FileOperationHandler(
         }
 
         try {
+            // 获取当前编辑器活跃状态
+            var currentActiveState = isCurrentEditorActive();
+            log.info("当前编辑器活跃状态: $currentActiveState");
             // 如果当前编辑器活跃，保存当前编辑器状态
             val savedActiveEditorState: EditorState? = getCurrentActiveEditorState()
+            log.info("保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}");
 
             // 获取当前所有打开的文件
             val currentOpenedFiles = getCurrentOpenedFiles()
@@ -86,9 +90,8 @@ class FileOperationHandler(
                 openFileByPath(fileToOpen)
             }
 
-            val currentActiveState = isCurrentEditorActive();
-            log.info("当前编辑器活跃状态: ${currentActiveState}");
-            log.info("之前保存的活跃编辑器状态: ${savedActiveEditorState?.filePath}");
+            // 再次获取当前编辑器活跃状态（防止状态延迟变更）
+            currentActiveState = isCurrentEditorActive();
             if (currentActiveState && savedActiveEditorState != null) {
                 log.info("恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}")
                 handleFileOpenOrNavigate(savedActiveEditorState)
