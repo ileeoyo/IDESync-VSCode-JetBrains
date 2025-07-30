@@ -7,13 +7,13 @@ import java.net.InetAddress
  * 负责生成和管理本机唯一标识，供各个组件使用
  */
 object LocalIdentifierManager {
-    
+
     /**
      * 本机唯一标识
      * 在应用启动时生成，全局唯一
      */
     val identifier: String by lazy { generateLocalIdentifier() }
-    
+
     /**
      * 生成本机唯一标识
      * 格式: hostname-pid-timestamp

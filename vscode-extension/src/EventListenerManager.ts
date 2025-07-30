@@ -26,7 +26,6 @@ export class EventListenerManager {
     }
 
 
-
     /**
      * 设置编辑器监听器
      */

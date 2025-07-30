@@ -135,18 +135,18 @@ export class EditorState {
         } else if (isMacOS || isLinux) {
             // macOS/Linux: 确保使用正斜杠，移除Windows盘符格式
             vscodePath = vscodePath.replace(/\\/g, '/');
-            
+
             // 移除Windows盘符（如果存在）并转换为Unix路径
             if (/^[A-Za-z]:[\/\\]/.test(vscodePath)) {
                 // 例如: C:/Users/... -> /Users/... 或 c:\Users\... -> /Users/...
                 vscodePath = vscodePath.substring(2).replace(/\\/g, '/');
             }
-            
+
             // 确保路径以 / 开头
             if (!vscodePath.startsWith('/')) {
                 vscodePath = '/' + vscodePath;
             }
-            
+
             // 清理重复的斜杠
             vscodePath = vscodePath.replace(/\/+/g, '/');
         }
@@ -260,7 +260,7 @@ export class MessageWrapper {
                 data.payload.timestamp,
                 data.payload.openedFiles
             );
-            
+
             return new MessageWrapper(
                 data.messageId,
                 data.senderId,

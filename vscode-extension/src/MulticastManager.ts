@@ -1,7 +1,6 @@
 import * as dgram from 'dgram';
-import * as os from 'os';
 import * as vscode from 'vscode';
-import {ConnectionCallback, ConnectionState, EditorState, MessageWrapper} from './Type';
+import {ConnectionCallback, ConnectionState, MessageWrapper} from './Type';
 import {Logger} from './Logger';
 import {MessageProcessor} from './MessageProcessor';
 import {LocalIdentifierManager} from './LocalIdentifierManager';

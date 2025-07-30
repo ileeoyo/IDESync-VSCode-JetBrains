@@ -13,8 +13,6 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
-import javax.swing.Timer
-import kotlin.concurrent.thread
 
 /**
  * WebSocket连接管理器

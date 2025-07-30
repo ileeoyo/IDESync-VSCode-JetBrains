@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import {ActionType, SourceType, EditorState, formatTimestamp} from './Type';
+import {ActionType, EditorState, formatTimestamp, SourceType} from './Type';
 import {Logger} from "./Logger";
 import {FileUtils} from './FileUtils';
 

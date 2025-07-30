@@ -1,6 +1,7 @@
 package com.vscode.jetbrainssync
 
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.CustomStatusBarWidget
 import com.intellij.openapi.wm.StatusBar
@@ -9,7 +10,6 @@ import java.awt.event.MouseEvent
 import java.util.*
 import javax.swing.JComponent
 import javax.swing.JLabel
-import com.intellij.openapi.diagnostic.Logger
 
 class SyncStatusBarWidget(
     private val project: Project,

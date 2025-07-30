@@ -1,5 +1,4 @@
-import * as vscode from 'vscode';
-import {ActionType, SourceType, EditorState, parseTimestamp, MessageWrapper} from './Type';
+import {EditorState, MessageWrapper, parseTimestamp} from './Type';
 import {Logger} from './Logger';
 import {FileOperationHandler} from './FileOperationHandler';
 
@@ -16,7 +15,7 @@ export class MessageProcessor {
     private receivedMessages = new Map<string, number>();
     private readonly maxReceivedMessagesSize = 1000;
     private readonly messageCleanupIntervalMs = 300000; // 5分钟
-    
+
     // 定时清理相关
     private isShutdown = false;
     private cleanupTimer: NodeJS.Timeout | null = null;

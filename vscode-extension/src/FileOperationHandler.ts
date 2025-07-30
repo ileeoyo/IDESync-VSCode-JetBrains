@@ -1,6 +1,5 @@
-import * as vscode from 'vscode';
 import * as path from 'path';
-import {ActionType, EditorState, SourceType} from './Type';
+import {ActionType, EditorState} from './Type';
 import {Logger} from './Logger';
 import {FileUtils} from './FileUtils';
 import {EditorStateManager} from './EditorStateManager';

@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import {EditorState, MessageWrapper} from './Type';
 import {Logger} from './Logger';
 import {MulticastManager} from './MulticastManager';

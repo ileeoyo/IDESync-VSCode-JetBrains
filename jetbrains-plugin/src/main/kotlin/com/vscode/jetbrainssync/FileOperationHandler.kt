@@ -2,7 +2,6 @@ package com.vscode.jetbrainssync
 
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.fileEditor.TextEditor
 import java.io.File
 
 /**
@@ -119,8 +118,6 @@ class FileOperationHandler(
             log.warn("无法打开文件进行导航: $compatiblePath")
         }
     }
-
-
 
 
     /**

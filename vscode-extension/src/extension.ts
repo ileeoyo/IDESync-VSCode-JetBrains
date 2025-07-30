@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import {EditorState, ConnectionCallback, ConnectionState} from './Type';
+import {ConnectionCallback, ConnectionState, EditorState} from './Type';
 import {Logger} from './Logger';
 import {FileUtils} from './FileUtils';
 import {EditorStateManager} from './EditorStateManager';
@@ -57,10 +57,10 @@ export class VSCodeJetBrainsSync {
     private initializeComponents() {
         // 首先初始化 FileUtils
         FileUtils.initialize(this.logger);
-        
+
         this.windowStateManager = new WindowStateManager(this.logger);
         this.windowStateManager.initialize();
-        
+
         this.editorStateManager = new EditorStateManager(this.logger);
         this.eventListenerManager = new EventListenerManager(this.logger, this.editorStateManager, this.windowStateManager);
         this.fileOperationHandler = new FileOperationHandler(this.logger, this.editorStateManager, this.windowStateManager);
@@ -84,7 +84,7 @@ export class VSCodeJetBrainsSync {
                 this.editorStateManager.updateState(workspaceSyncState);
             }
         });
-        
+
         // 连接状态变化回调
         const connectionCallback: ConnectionCallback = {
             onConnected: () => {

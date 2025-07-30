@@ -3,13 +3,13 @@ package com.vscode.jetbrainssync
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.project.Project
 import java.net.*
-import java.util.concurrent.*
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
-import kotlin.jvm.java
 
 // ==================== 内部数据类 ====================
 
