@@ -26,7 +26,6 @@ class EventListenerManager(
     private var messageBusConnection: MessageBusConnection? = null
 
 
-
     /**
      * 设置编辑器监听器
      */
@@ -111,7 +110,7 @@ class EventListenerManager(
             override fun caretPositionChanged(event: com.intellij.openapi.editor.event.CaretEvent) {
                 log.info("事件-光标改变")
                 // 动态获取当前真正的文件
-                val currentFile = getCurrentFile(event.editor)
+                val currentFile = event.editor.virtualFile
                 if (currentFile != null) {
                     if (!FileUtils.isRegularFileEditor(currentFile)) {
                         log.info("事件-光标改变: ${currentFile.path} - 非常规文件，已忽略")
@@ -157,27 +156,6 @@ class EventListenerManager(
         }
     }
 
-    /**
-     * 动态获取当前编辑器的文件
-     */
-    private fun getCurrentFile(editor: Editor): VirtualFile? {
-        return try {
-            // 优先从FileEditorManager获取当前选中的文件
-            val fileEditorManager = FileEditorManager.getInstance(project)
-            val selectedFile = fileEditorManager.selectedFiles.firstOrNull()
-
-            if (selectedFile != null) {
-                selectedFile
-            } else {
-                // 备用方案：从editor的document获取文件
-                val document = editor.document
-                com.intellij.openapi.fileEditor.FileDocumentManager.getInstance().getFile(document)
-            }
-        } catch (e: Exception) {
-            log.warn("获取当前文件时出现异常: ${e.message}")
-            null
-        }
-    }
 
     /**
      * 清理资源
