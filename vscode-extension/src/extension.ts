@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import {EditorState, ConnectionCallback, ConnectionState} from './Type';
 import {Logger} from './Logger';
+import {FileUtils} from './FileUtils';
 import {EditorStateManager} from './EditorStateManager';
 import {FileOperationHandler} from './FileOperationHandler';
 import {EventListenerManager} from './EventListenerManager';
@@ -54,6 +55,9 @@ export class VSCodeJetBrainsSync {
      * 初始化各个组件
      */
     private initializeComponents() {
+        // 首先初始化 FileUtils
+        FileUtils.initialize(this.logger);
+        
         this.windowStateManager = new WindowStateManager(this.logger);
         this.windowStateManager.initialize();
         

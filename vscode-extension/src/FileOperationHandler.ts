@@ -43,7 +43,7 @@ export class FileOperationHandler {
     async handleFileClose(state: EditorState): Promise<void> {
         this.logger.info(`进行文件关闭操作: ${state.filePath}`);
         const compatiblePath = state.getCompatiblePath();
-        await FileUtils.closeFileByPath(compatiblePath, this.logger);
+        await FileUtils.closeFileByPath(compatiblePath);
     }
 
     /**
@@ -80,13 +80,13 @@ export class FileOperationHandler {
             // 关闭多余的文件（当前打开但目标中不存在的文件）
             const filesToClose = currentOpenedFiles.filter((file: string) => !targetFiles.includes(file));
             for (const fileToClose of filesToClose) {
-                await FileUtils.closeFileByPath(fileToClose, this.logger);
+                await FileUtils.closeFileByPath(fileToClose);
             }
 
             // 打开缺失的文件（目标中存在但当前未打开的文件）
             const filesToOpen = targetFiles.filter((file: string) => !currentOpenedFiles.includes(file));
             for (const fileToOpen of filesToOpen) {
-                await FileUtils.openFileByPath(fileToOpen, this.logger);
+                await FileUtils.openFileByPath(fileToOpen);
             }
 
             // 再次获取当前编辑器活跃状态（防止状态延迟变更）
@@ -115,9 +115,9 @@ export class FileOperationHandler {
     async handleFileOpenOrNavigate(state: EditorState): Promise<void> {
         this.logger.info(`进行文件导航操作: ${state.filePath}, 行${state.line}, 列${state.column}`)
         try {
-            const editor = await FileUtils.openFileByPath(state.getCompatiblePath(), this.logger);
+            const editor = await FileUtils.openFileByPath(state.getCompatiblePath());
             if (editor) {
-                FileUtils.navigateToPosition(editor, state.line, state.column, this.logger);
+                FileUtils.navigateToPosition(editor, state.line, state.column);
                 this.logger.info(`✅ 成功同步到文件: ${state.filePath}, 行${state.line}, 列${state.column}`);
             }
         } catch (error) {

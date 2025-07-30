@@ -60,7 +60,7 @@ class EventListenerManager(
                     log.info("事件-文件关闭: ${file.path}")
 
                     // 检查文件是否在其他编辑器中仍然打开
-                    val isStillOpen = FileUtils.isFileOpenInOtherTabs(file, project)
+                    val isStillOpen = FileUtils.isFileOpenInOtherTabs(file)
                     if (isStillOpen) {
                         log.info("文件在其他编辑器中仍然打开，跳过关闭消息: ${file.path}")
                         return

@@ -40,7 +40,7 @@ class FileOperationHandler(
     private fun handleFileClose(state: EditorState) {
         log.info("进行文件关闭操作: ${state.filePath}")
         val compatiblePath = state.getCompatiblePath()
-        FileUtils.closeFileByPath(compatiblePath, project, log)
+        FileUtils.closeFileByPath(compatiblePath)
     }
 
     /**
@@ -63,7 +63,7 @@ class FileOperationHandler(
             log.info("保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}");
 
             // 获取当前所有打开的文件
-            val currentOpenedFiles = FileUtils.getAllOpenedFiles(project)
+            val currentOpenedFiles = FileUtils.getAllOpenedFiles()
             val targetFiles = state.openedFiles.map { filePath ->
                 // 创建临时EditorState以使用路径转换逻辑
                 val tempState = EditorState(ActionType.OPEN, filePath, 0, 0)
@@ -77,13 +77,13 @@ class FileOperationHandler(
             // 关闭多余的文件（当前打开但目标中不存在的文件）
             val filesToClose = currentOpenedFiles.filter { file -> !targetFiles.contains(file) }
             for (fileToClose in filesToClose) {
-                FileUtils.closeFileByPath(fileToClose, project, log)
+                FileUtils.closeFileByPath(fileToClose)
             }
 
             // 打开缺失的文件（目标中存在但当前未打开的文件）
             val filesToOpen = targetFiles.filter { file -> !currentOpenedFiles.contains(file) }
             for (fileToOpen in filesToOpen) {
-                FileUtils.openFileByPath(fileToOpen, project, log)
+                FileUtils.openFileByPath(fileToOpen)
             }
 
             // 再次获取当前编辑器活跃状态（防止状态延迟变更）
@@ -112,10 +112,10 @@ class FileOperationHandler(
         log.info("进行文件导航操作: ${state.filePath}, 行${state.line}, 列${state.column}")
 
         val compatiblePath = state.getCompatiblePath()
-        val editor = FileUtils.openFileByPath(compatiblePath, project, log)
+        val editor = FileUtils.openFileByPath(compatiblePath)
 
         editor?.let { textEditor ->
-            FileUtils.navigateToPosition(textEditor, state.line, state.column, log)
+            FileUtils.navigateToPosition(textEditor, state.line, state.column)
             log.info("✅ 成功同步到文件: ${compatiblePath}, 行${state.line}, 列${state.column}")
         } ?: run {
             log.warn("无法打开文件进行导航: $compatiblePath")

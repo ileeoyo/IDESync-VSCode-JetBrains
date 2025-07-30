@@ -16,11 +16,23 @@ import java.io.File
  * 提供文件操作相关的工具方法
  */
 object FileUtils {
+    private lateinit var project: Project
+    private lateinit var log: Logger
+
+    /**
+     * 初始化工具类
+     * @param project 项目实例
+     * @param log 日志记录器
+     */
+    fun initialize(project: Project, log: Logger) {
+        this.project = project
+        this.log = log
+    }
 
     /**
      * 检查文件是否在其他编辑器中仍然打开
      */
-    fun isFileOpenInOtherTabs(file: VirtualFile, project: Project): Boolean {
+    fun isFileOpenInOtherTabs(file: VirtualFile): Boolean {
         val fileEditorManager = FileEditorManager.getInstance(project)
         return fileEditorManager.isFileOpen(file)
     }
@@ -43,7 +55,7 @@ object FileUtils {
      * 获取当前所有打开的文件路径
      * 只返回常规文件编辑器，过滤掉特殊标签窗口
      */
-    fun getAllOpenedFiles(project: Project): List<String> {
+    fun getAllOpenedFiles(): List<String> {
         val fileEditorManager = FileEditorManager.getInstance(project)
         return fileEditorManager.openFiles
             .filter { virtualFile ->
@@ -57,7 +69,7 @@ object FileUtils {
      * 根据文件路径关闭文件
      * 如果直接路径匹配失败，会尝试通过文件名匹配
      */
-    fun closeFileByPath(filePath: String, project: Project, log: Logger) {
+    fun closeFileByPath(filePath: String) {
         try {
             log.info("准备关闭文件: $filePath")
             val file = File(filePath)
@@ -98,11 +110,9 @@ object FileUtils {
     /**
      * 根据文件路径打开文件
      * @param filePath 文件路径
-     * @param project 项目实例
-     * @param log 日志记录器
      * @return 返回打开的TextEditor，如果失败返回null
      */
-    fun openFileByPath(filePath: String, project: Project, log: Logger): TextEditor? {
+    fun openFileByPath(filePath: String): TextEditor? {
         try {
             log.info("准备打开文件: $filePath")
             val file = File(filePath)
@@ -135,9 +145,8 @@ object FileUtils {
      * @param textEditor 文本编辑器
      * @param line 行号
      * @param column 列号
-     * @param log 日志记录器
      */
-    fun navigateToPosition(textEditor: TextEditor, line: Int, column: Int, log: Logger) {
+    fun navigateToPosition(textEditor: TextEditor, line: Int, column: Int) {
         val position = LogicalPosition(line, column)
 
         ApplicationManager.getApplication().runWriteAction {

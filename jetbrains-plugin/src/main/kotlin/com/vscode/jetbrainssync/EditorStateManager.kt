@@ -85,7 +85,7 @@ class EditorStateManager(
         val fileEditorManager = FileEditorManager.getInstance(project)
         val editor = fileEditorManager.selectedTextEditor
         val file = fileEditorManager.selectedFiles.firstOrNull()
-        val openedFiles = FileUtils.getAllOpenedFiles(project)
+        val openedFiles = FileUtils.getAllOpenedFiles()
 
         return if (editor != null && file != null) {
             EditorState(

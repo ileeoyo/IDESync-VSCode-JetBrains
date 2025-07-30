@@ -35,6 +35,9 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     init {
         log.info("初始化VSCode-JetBrains同步服务（重构版）")
 
+        // 首先初始化 FileUtils
+        FileUtils.initialize(project, log)
+
         // 初始化窗口状态管理器
         windowStateManager.initialize()
 

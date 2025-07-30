@@ -7,6 +7,15 @@ import {Logger} from './Logger';
  * 提供文件操作相关的工具方法
  */
 export class FileUtils {
+    private static logger: Logger;
+
+    /**
+     * 初始化工具类
+     * @param logger 日志记录器
+     */
+    static initialize(logger: Logger): void {
+        this.logger = logger;
+    }
 
     /**
      * 检查文件是否在其他TAB中仍然打开
@@ -81,9 +90,9 @@ export class FileUtils {
      * 根据文件路径关闭文件
      * 如果直接路径匹配失败，会尝试通过文件名匹配
      */
-    static async closeFileByPath(filePath: string, logger: Logger): Promise<void> {
+    static async closeFileByPath(filePath: string): Promise<void> {
         try {
-            logger.info(`准备关闭文件: ${filePath}`);
+            this.logger.info(`准备关闭文件: ${filePath}`);
             const documents = vscode.workspace.textDocuments;
 
             // 首先尝试精确路径匹配
@@ -92,14 +101,14 @@ export class FileUtils {
             if (editorToClose) {
                 await vscode.window.showTextDocument(editorToClose);
                 await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                logger.info(`✅ 成功关闭文件: ${filePath}`);
+                this.logger.info(`✅ 成功关闭文件: ${filePath}`);
                 return;
             }
 
             // 如果精确匹配失败，尝试通过文件名匹配
-            logger.warn(`❌ 精确路径匹配失败: ${filePath}`);
+            this.logger.warn(`❌ 精确路径匹配失败: ${filePath}`);
             const fileName = path.basename(filePath);
-            logger.info(`🔍 尝试通过文件名查找: ${fileName}`);
+            this.logger.info(`🔍 尝试通过文件名查找: ${fileName}`);
 
             editorToClose = documents.find(doc => {
                 const docFileName = path.basename(doc.uri.fsPath);
@@ -107,34 +116,33 @@ export class FileUtils {
             });
 
             if (editorToClose) {
-                logger.info(`🎯 找到匹配的文件: ${editorToClose.uri.fsPath}`);
+                this.logger.info(`🎯 找到匹配的文件: ${editorToClose.uri.fsPath}`);
                 await vscode.window.showTextDocument(editorToClose);
                 await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                logger.info(`✅ 通过文件名匹配成功关闭文件: ${editorToClose.uri.fsPath}`);
+                this.logger.info(`✅ 通过文件名匹配成功关闭文件: ${editorToClose.uri.fsPath}`);
             } else {
-                logger.warn(`❌ 未找到匹配的文件: ${fileName}`);
+                this.logger.warn(`❌ 未找到匹配的文件: ${fileName}`);
             }
         } catch (error) {
-            logger.warn(`关闭文件失败: ${filePath}`, error as Error);
+            this.logger.warn(`关闭文件失败: ${filePath}`, error as Error);
         }
     }
 
     /**
      * 根据文件路径打开文件
      * @param filePath 文件路径
-     * @param logger 日志记录器
      * @returns 返回打开的TextEditor，如果失败返回null
      */
-    static async openFileByPath(filePath: string, logger: Logger): Promise<vscode.TextEditor | null> {
+    static async openFileByPath(filePath: string): Promise<vscode.TextEditor | null> {
         try {
-            logger.info(`准备打开文件: ${filePath}`);
+            this.logger.info(`准备打开文件: ${filePath}`);
             const uri = vscode.Uri.file(filePath);
             const document = await vscode.workspace.openTextDocument(uri);
             const editor = await vscode.window.showTextDocument(document, {preview: false});
-            logger.info(`✅ 成功打开文件: ${filePath}`);
+            this.logger.info(`✅ 成功打开文件: ${filePath}`);
             return editor;
         } catch (error) {
-            logger.warn(`打开文件失败: ${filePath}`, error as Error);
+            this.logger.warn(`打开文件失败: ${filePath}`, error as Error);
             return null;
         }
     }
@@ -144,9 +152,8 @@ export class FileUtils {
      * @param editor 文本编辑器
      * @param line 行号
      * @param column 列号
-     * @param logger 日志记录器
      */
-    static navigateToPosition(editor: vscode.TextEditor, line: number, column: number, logger: Logger): void {
+    static navigateToPosition(editor: vscode.TextEditor, line: number, column: number): void {
         const position = new vscode.Position(line, column);
         editor.selection = new vscode.Selection(position, position);
 
@@ -157,7 +164,7 @@ export class FileUtils {
                 new vscode.Range(position, position),
                 vscode.TextEditorRevealType.InCenter
             );
-            logger.info(`光标位置不可见，执行滚动到: 行${line}, 列${column}`);
+            this.logger.info(`光标位置不可见，执行滚动到: 行${line}, 列${column}`);
         }
     }
 } 
