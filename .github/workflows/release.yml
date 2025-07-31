@@ -247,6 +247,8 @@ jobs:
                   if [ "${{ github.event_name }}" = "push" ]; then
                     # 如果是标签推送触发，获取标签的注释信息
                     TAG_NAME="${{ needs.check-and-create-tag.outputs.tag_name }}"
+                    # 强制获取标签的完整信息，确保包含附注内容
+                    git fetch --tags --force
                     TAG_MESSAGE=$(git tag -l --format='%(contents)' $TAG_NAME)
                     if [ -z "$TAG_MESSAGE" ]; then
                       TAG_MESSAGE="Release $TAG_NAME"
