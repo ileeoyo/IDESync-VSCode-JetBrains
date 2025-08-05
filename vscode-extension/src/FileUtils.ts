@@ -147,40 +147,51 @@ export class FileUtils {
 
     /**
      * 根据文件路径关闭文件
-     * 如果直接路径匹配失败，会尝试通过文件名匹配
+     * 采用两阶段关闭策略：先尝试tab方式，失败后再用textDocument方式
+     * 只使用路径精确匹配，不使用文件名匹配
      */
     static async closeFileByPath(filePath: string): Promise<void> {
         try {
             this.logger.info(`准备关闭文件: ${filePath}`);
-            const documents = vscode.workspace.textDocuments;
 
-            // 首先尝试精确路径匹配
-            let editorToClose = documents.find(doc => doc.uri.fsPath === filePath);
+            // 第一阶段：尝试通过tabGroups API关闭
+            let targetTab: vscode.Tab | undefined;
 
-            if (editorToClose) {
-                await vscode.window.showTextDocument(editorToClose);
-                await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                this.logger.info(`✅ 成功关闭文件: ${filePath}`);
-                return;
+            for (const tabGroup of vscode.window.tabGroups.all) {
+                for (const tab of tabGroup.tabs) {
+                    if (this.isRegularFileTab(tab)) {
+                        const tabInput = tab.input as vscode.TabInputText;
+                        if (tabInput.uri.fsPath === filePath) {
+                            targetTab = tab;
+                            break;
+                        }
+                    }
+                }
+                if (targetTab) break;
             }
 
-            // 如果精确匹配失败，尝试通过文件名匹配
-            this.logger.warn(`❌ 精确路径匹配失败: ${filePath}`);
-            const fileName = path.basename(filePath);
-            this.logger.info(`🔍 尝试通过文件名查找: ${fileName}`);
+            if (targetTab) {
+                try {
+                    await vscode.window.tabGroups.close(targetTab);
+                    this.logger.info(`✅ 通过tab方式成功关闭文件: ${filePath}`);
+                    return;
+                } catch (tabCloseError) {
+                    this.logger.warn(`tab方式关闭失败，尝试备用方案: ${filePath}`, tabCloseError as Error);
+                }
+            } else {
+                this.logger.warn(`❌ 在tab中未找到文件: ${filePath}`);
+            }
 
-            editorToClose = documents.find(doc => {
-                const docFileName = path.basename(doc.uri.fsPath);
-                return docFileName === fileName;
-            });
+            // 第二阶段：备用方案 - 使用原有的textDocument方式关闭
+            this.logger.info(`🔄 尝试通过textDocument方式关闭: ${filePath}`);
+            const editorToClose = vscode.workspace.textDocuments.find(doc => doc.uri.fsPath === filePath);
 
             if (editorToClose) {
-                this.logger.info(`🎯 找到匹配的文件: ${editorToClose.uri.fsPath}`);
                 await vscode.window.showTextDocument(editorToClose);
                 await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
-                this.logger.info(`✅ 通过文件名匹配成功关闭文件: ${editorToClose.uri.fsPath}`);
+                this.logger.info(`✅ 通过textDocument方式成功关闭文件: ${filePath}`);
             } else {
-                this.logger.warn(`❌ 未找到匹配的文件: ${fileName}`);
+                this.logger.warn(`❌ 在textDocument中也未找到文件: ${filePath}`);
             }
         } catch (error) {
             this.logger.warn(`关闭文件失败: ${filePath}`, error as Error);
