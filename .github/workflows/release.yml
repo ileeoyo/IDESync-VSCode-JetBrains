@@ -236,27 +236,45 @@ jobs:
                   name: vscode-plugin
                   path: ./artifacts/vscode-plugin
 
-            # GitHub会自动为Release生成源代码下载链接，无需手动创建
-            # 格式：https://github.com/owner/repo/archive/refs/tags/v1.0.0.zip
-            # 格式：https://github.com/owner/repo/archive/refs/tags/v1.0.0.tar.gz
+
+            - name: Read changelog for current version
+              id: changelog
+              uses: mindsers/changelog-reader-action@v2
+              with:
+                  validation_level: none
+                  version: ${{ needs.check-and-create-tag.outputs.version }}
+                  path: ./vscode-extension/CHANGELOG.md
+              continue-on-error: true
 
             - name: Get release description
               id: get-info
               run: |
-                  # 获取release描述
-                  if [ "${{ github.event_name }}" = "push" ]; then
-                    # 如果是标签推送触发，获取标签的注释信息
-                    TAG_NAME="${{ needs.check-and-create-tag.outputs.tag_name }}"
-                    # 强制获取标签的完整信息，确保包含附注内容
-                    git fetch --tags --force
-                    TAG_MESSAGE=$(git tag -l --format='%(contents)' $TAG_NAME)
-                    if [ -z "$TAG_MESSAGE" ]; then
-                      TAG_MESSAGE="Release $TAG_NAME"
-                    fi
-                    echo "description=$TAG_MESSAGE" >> $GITHUB_OUTPUT
+                  # 优先使用从CHANGELOG.md读取的内容
+                  if [ "${{ steps.changelog.outputs.changes }}" != "" ] && [ "${{ steps.changelog.outcome }}" = "success" ]; then
+                    echo "Using changelog content for version ${{ needs.check-and-create-tag.outputs.version }}"
+                    # 使用多行输出格式处理changelog内容
+                    {
+                      echo 'description<<EOF'
+                      echo '${{ steps.changelog.outputs.changes }}'
+                      echo 'EOF'
+                    } >> $GITHUB_OUTPUT
                   else
-                    # 如果是手动触发，使用用户输入的描述
-                    echo "description=${{ github.event.inputs.release_description }}" >> $GITHUB_OUTPUT
+                    echo "Changelog not found for version ${{ needs.check-and-create-tag.outputs.version }}, using fallback description"
+                    # 获取release描述（原有逻辑）
+                    if [ "${{ github.event_name }}" = "push" ]; then
+                      # 如果是标签推送触发，获取标签的注释信息
+                      TAG_NAME="${{ needs.check-and-create-tag.outputs.tag_name }}"
+                      # 强制获取标签的完整信息，确保包含附注内容
+                      git fetch --tags --force
+                      TAG_MESSAGE=$(git tag -l --format='%(contents)' $TAG_NAME)
+                      if [ -z "$TAG_MESSAGE" ]; then
+                        TAG_MESSAGE="Release $TAG_NAME"
+                      fi
+                      echo "description=$TAG_MESSAGE" >> $GITHUB_OUTPUT
+                    else
+                      # 如果是手动触发，使用用户输入的描述
+                      echo "description=${{ github.event.inputs.release_description }}" >> $GITHUB_OUTPUT
+                    fi
                   fi
 
             - name: Verify artifacts exist

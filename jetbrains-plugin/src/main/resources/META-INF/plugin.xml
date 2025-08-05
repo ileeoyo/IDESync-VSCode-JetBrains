@@ -64,6 +64,7 @@
         <ul>
             <li>自动启动同步：新增配置项支持IDE启动后自动开启同步功能，默认关闭需手动启用</li>
             <li>优化VSCode文件关闭逻辑：修复部分情况tab显示但无法关闭的问题，提升同步可靠性</li>
+            <li>自动化发布流程：集成changelog-reader-action，支持从CHANGELOG.md自动生成GitHub Release描述</li>
         </ul>
         <h3>Version 1.1.0</h3>
         <ul>
