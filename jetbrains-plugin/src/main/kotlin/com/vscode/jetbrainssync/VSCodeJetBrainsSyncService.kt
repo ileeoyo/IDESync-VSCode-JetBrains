@@ -49,6 +49,9 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
         // 初始化事件监听器
         eventListenerManager.setupEditorListeners()
 
+        // 检查自动启动配置
+        checkAutoStartConfig()
+
         log.info("同步服务初始化完成")
     }
 
@@ -104,6 +107,19 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
                 }
             }
         })
+    }
+
+    /**
+     * 检查自动启动配置
+     */
+    private fun checkAutoStartConfig() {
+        val settings = VSCodeJetBrainsSyncSettings.getInstance(project)
+        if (settings.state.autoStartSync) {
+            log.info("检测到自动启动配置已开启，正在启动同步功能...")
+            multicastManager.toggleAutoReconnect()
+        } else {
+            log.info("自动启动配置已关闭，需要手动启动同步功能")
+        }
     }
 
     /**

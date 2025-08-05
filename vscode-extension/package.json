@@ -1,77 +1,82 @@
 {
-  "name": "vscode-jetbrains-sync",
-  "displayName": "IDE Sync - Connect to JetBrains IDE",
-  "version": "1.1.0",
-  "publisher": "denisbalber",
-  "description": "Multi-IDE synchronization extension with UDP multicast support for VSCode, Cursor, Windsurf and JetBrains IDEs",
-  "icon": "icon.png",
-  "sponsor": {
-    "url": "https://ko-fi.com/denisbalber"
-  },
-"keywords": [
-    "JetBrains",
-    "sync",
-    "synchronization",
-    "ide",
-    "editor",
-    "connection",
-    "bridge",
-    "VSCode",
-    "vscode-rider-sync",
-    "cursor",
-    "windsurf",
-    "IntelliJ",
-    "intellij-based",
-    "IntelliJ IDEA",
-    "WebStorm",
-    "Rider",
-    "JetBrains IDE",
-    "IDE Sync",
-    "IDE Sync - Connect to VSCode",
-    "IDE Sync - Connect to JetBrains IDE"
-],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/denisbalber/IDESync-VSCode-JetBrains"
-  },
-  "main": "dist/extension.js",
-  "activationEvents": [
-    "onStartupFinished"
-  ],
-  "contributes": {
-    "commands": [
-      {
-        "command": "vscode-jetbrains-sync.toggleAutoReconnect",
-        "title": "Toggle VSCode-JetBrains Sync"
-      }
+    "name": "vscode-jetbrains-sync",
+    "displayName": "IDE Sync - Connect to JetBrains IDE",
+    "version": "1.2.0",
+    "publisher": "denisbalber",
+    "description": "Multi-IDE synchronization extension with UDP multicast support for VSCode, Cursor, Windsurf and JetBrains IDEs",
+    "icon": "icon.png",
+    "sponsor": {
+        "url": "https://ko-fi.com/denisbalber"
+    },
+    "keywords": [
+        "JetBrains",
+        "sync",
+        "synchronization",
+        "ide",
+        "editor",
+        "connection",
+        "bridge",
+        "VSCode",
+        "vscode-rider-sync",
+        "cursor",
+        "windsurf",
+        "IntelliJ",
+        "intellij-based",
+        "IntelliJ IDEA",
+        "WebStorm",
+        "Rider",
+        "JetBrains IDE",
+        "IDE Sync",
+        "IDE Sync - Connect to VSCode",
+        "IDE Sync - Connect to JetBrains IDE"
     ],
-    "configuration": {
-      "title": "IDE Sync - Connect to JetBrains IDE",
-      "properties": {
-        "vscode-jetbrains-sync.port": {
-          "type": "number",
-          "default": 3000,
-          "description": "Configure the port for synchronization with JetBrains IDE (use different ports to create separate sync groups)."
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/denisbalber/IDESync-VSCode-JetBrains"
+    },
+    "main": "dist/extension.js",
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "contributes": {
+        "commands": [
+            {
+                "command": "vscode-jetbrains-sync.toggleAutoReconnect",
+                "title": "Toggle VSCode-JetBrains Sync"
+            }
+        ],
+        "configuration": {
+            "title": "IDE Sync - Connect to JetBrains IDE",
+            "properties": {
+                "vscode-jetbrains-sync.port": {
+                    "type": "number",
+                    "default": 3000,
+                    "description": "Configure the port for synchronization with JetBrains IDE (use different ports to create separate sync groups)."
+                },
+                "vscode-jetbrains-sync.autoStartSync": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Automatically start sync when IDE opens (default: disabled, sync must be manually enabled)."
+                }
+            }
         }
-      }
+    },
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc -w",
+        "package": "vsce package"
+    },
+    "dependencies": {
+        "ws": "^8.16.0"
+    },
+    "devDependencies": {
+        "@types/node": "^20.8.2",
+        "@types/vscode": "^1.93.0",
+        "@types/ws": "^8.5.10",
+        "typescript": "^5.2.2",
+        "@vscode/vsce": "^2.24.0"
+    },
+    "engines": {
+        "vscode": "^1.93.0"
     }
-  },
-  "scripts": {
-    "build": "tsc",
-    "watch": "tsc -w",
-    "package": "vsce package"
-  },
-  "dependencies": {
-    "ws": "^8.16.0"
-  },
-  "devDependencies": {
-    "@types/node": "^20.8.2",
-    "@types/vscode": "^1.93.0",
-    "@types/ws": "^8.5.10",
-    "typescript": "^5.2.2",
-    "@vscode/vsce": "^2.24.0"
-  },
-  "engines": {
-    "vscode": "^1.93.0"
-  }
 }
