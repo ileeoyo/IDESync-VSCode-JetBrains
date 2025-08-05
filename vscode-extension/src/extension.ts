@@ -45,6 +45,9 @@ export class VSCodeJetBrainsSync {
         this.setupComponentCallbacks();
         this.eventListenerManager.setupEditorListeners();
 
+        // 检查自动启动配置
+        this.checkAutoStartConfig();
+
         this.updateStatusBarWidget();
         this.statusBarItem.show();
 
@@ -148,6 +151,19 @@ export class VSCodeJetBrainsSync {
         this.statusBarItem.tooltip = tooltip;
     }
 
+
+    /**
+     * 检查自动启动配置
+     */
+    private checkAutoStartConfig() {
+        const autoStartSync = vscode.workspace.getConfiguration('vscode-jetbrains-sync').get('autoStartSync', false);
+        if (autoStartSync) {
+            this.logger.info('检测到自动启动配置已开启，正在启动同步功能...');
+            this.multicastManager.toggleAutoReconnect();
+        } else {
+            this.logger.info('自动启动配置已关闭，需要手动启动同步功能');
+        }
+    }
 
     /**
      * 切换自动重连状态
