@@ -81,18 +81,30 @@ export class EventListenerManager {
             })
         )
 
-        // 监听光标位置变化
+        // 监听光标位置和选中变化
         this.disposables.push(
             vscode.window.onDidChangeTextEditorSelection((event) => {
                 if (!FileUtils.isRegularFileUri(event.textEditor.document.uri)) {
                     return;
                 }
-                this.logger.info(`事件-文件改变: ${event.textEditor.document.uri.fsPath}`);
+
+                const hasSelection = !event.textEditor.selection.isEmpty;
+                const selection = event.textEditor.selection;
+                const cursorPosition = selection.active;
+                const filePath = event.textEditor.document.uri.fsPath;
+
+                this.logger.info(`事件-选中改变: ${filePath}, 光标位置: 行${cursorPosition.line + 1}, 列${cursorPosition.character + 1}, 是否有选中: ${hasSelection}`);
+
+                if (hasSelection) {
+                    this.logger.info(`选中范围: ${selection.start.line + 1},${selection.start.character + 1}-${selection.end.line + 1},${selection.end.character + 1}`);
+                }
+
                 if (event.textEditor === FileUtils.getCurrentActiveEditor()) {
                     const state = this.editorStateManager.createEditorState(
                         event.textEditor, ActionType.NAVIGATE, this.windowStateManager.isWindowActive()
                     );
-                    this.logger.info(`准备发送导航消息: ${JSON.stringify(state)}`);
+                    const selectionInfo = state.hasSelection() ? `有(${state.getSelectionInfo()})` : '无';
+                    this.logger.info(`准备发送导航消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}`);
                     this.editorStateManager.debouncedUpdateState(state);
                 }
             })

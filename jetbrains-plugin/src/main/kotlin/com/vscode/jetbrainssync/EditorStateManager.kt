@@ -48,6 +48,10 @@ class EditorStateManager(
         isActive: Boolean = false
     ): EditorState {
         val (line, column) = FileUtils.getEditorCursorPosition(editor)
+
+        // 获取选中范围坐标
+        val selectionCoordinates = FileUtils.getSelectionCoordinates(editor)
+
         return EditorState(
             action = action,
             filePath = FileUtils.getVirtualFilePath(file),
@@ -55,7 +59,12 @@ class EditorStateManager(
             column = column,
             source = SourceType.JETBRAINS,
             isActive = isActive,
-            timestamp = formatTimestamp()
+            timestamp = formatTimestamp(),
+            openedFiles = null,
+            selectionStartLine = selectionCoordinates?.first,
+            selectionStartColumn = selectionCoordinates?.second,
+            selectionEndLine = selectionCoordinates?.third,
+            selectionEndColumn = selectionCoordinates?.fourth
         )
     }
 
@@ -92,7 +101,11 @@ class EditorStateManager(
                 source = SourceType.JETBRAINS,
                 isActive = isActive,
                 timestamp = formatTimestamp(),
-                openedFiles = openedFiles
+                openedFiles = openedFiles,
+                selectionStartLine = null,
+                selectionStartColumn = null,
+                selectionEndLine = null,
+                selectionEndColumn = null
             )
         } else {
             // 没有活跃编辑器时，使用空的文件路径和位置
@@ -104,7 +117,11 @@ class EditorStateManager(
                 source = SourceType.JETBRAINS,
                 isActive = isActive,
                 timestamp = formatTimestamp(),
-                openedFiles = openedFiles
+                openedFiles = openedFiles,
+                selectionStartLine = null,
+                selectionStartColumn = null,
+                selectionEndLine = null,
+                selectionEndColumn = null
             )
         }
     }
@@ -186,6 +203,10 @@ class EditorStateManager(
 
             if (editor != null && file != null && FileUtils.isRegularFile(file)) {
                 val position = FileUtils.getEditorCursorPosition(editor)
+
+                // 获取选中范围坐标
+                val selectionCoordinates = FileUtils.getSelectionCoordinates(editor)
+
                 EditorState(
                     action = ActionType.NAVIGATE,
                     filePath = FileUtils.getVirtualFilePath(file),
@@ -193,7 +214,12 @@ class EditorStateManager(
                     column = position.second,
                     source = SourceType.JETBRAINS,
                     isActive = isActive,
-                    timestamp = formatTimestamp()
+                    timestamp = formatTimestamp(),
+                    openedFiles = null,
+                    selectionStartLine = selectionCoordinates?.first,
+                    selectionStartColumn = selectionCoordinates?.second,
+                    selectionEndLine = selectionCoordinates?.third,
+                    selectionEndColumn = selectionCoordinates?.fourth
                 )
             } else {
                 null

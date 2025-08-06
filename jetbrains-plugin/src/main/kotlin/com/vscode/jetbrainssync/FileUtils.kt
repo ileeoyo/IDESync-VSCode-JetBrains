@@ -95,6 +95,34 @@ object FileUtils {
         return Pair(position.line, position.column)
     }
 
+    /**
+     * 获取编辑器的选中范围坐标
+     * @param editor 文本编辑器
+     * @return 选中范围坐标 (startLine, startColumn, endLine, endColumn)，如果没有选中则返回null
+     */
+    fun getSelectionCoordinates(editor: Editor): Quadruple<Int, Int, Int, Int>? {
+        val selectionModel = editor.selectionModel
+        val hasSelection = selectionModel.hasSelection()
+
+        return if (hasSelection) {
+            val startPosition = editor.offsetToLogicalPosition(selectionModel.selectionStart)
+            val endPosition = editor.offsetToLogicalPosition(selectionModel.selectionEnd)
+            Quadruple(startPosition.line, startPosition.column, endPosition.line, endPosition.column)
+        } else {
+            null
+        }
+    }
+
+    /**
+     * 四元组数据类，用于返回选中范围的四个坐标
+     */
+    data class Quadruple<out A, out B, out C, out D>(
+        val first: A,
+        val second: B,
+        val third: C,
+        val fourth: D
+    )
+
 
     /**
      * 获取当前选中的文件和编辑器
@@ -131,22 +159,7 @@ object FileUtils {
                     return
                 }
             }
-
-            // 如果精确匹配失败，尝试通过文件名匹配
-            log.warn("❌ 精确路径匹配失败: $filePath")
-            val fileName = File(filePath).name
-            log.info("🔍 尝试通过文件名查找: $fileName")
-
-            val openFiles = fileEditorManager.openFiles
-            val matchingFile = openFiles.find { it.name == fileName }
-
-            matchingFile?.let { vFile ->
-                log.info("🎯 找到匹配的文件: ${vFile.path}")
-                fileEditorManager.closeFile(vFile)
-                log.info("✅ 通过文件名匹配成功关闭文件: ${vFile.path}")
-            } ?: run {
-                log.warn("❌ 未找到匹配的文件: $fileName")
-            }
+            log.warn("❌ 文件未找到: $filePath")
         } catch (e: Exception) {
             log.warn("关闭文件失败: $filePath - ${e.message}", e)
         }
@@ -177,7 +190,7 @@ object FileUtils {
                     return null
                 }
             }
-            log.warn("❌ 无法找到要打开的文件: $filePath")
+            log.warn("❌ 文件未找到: $filePath")
             return null
         } catch (e: Exception) {
             log.warn("打开文件失败: $filePath - ${e.message}", e)
@@ -185,26 +198,69 @@ object FileUtils {
         }
     }
 
+
     /**
-     * 导航到指定位置
+     * 统一处理选中和光标移动
+     * 先处理选中状态（有选中则设置选中，无选中则清除选中），然后确保光标位置在可视区域内
      * @param textEditor 文本编辑器
-     * @param line 行号
-     * @param column 列号
+     * @param line 光标行号
+     * @param column 光标列号
+     * @param startLine 选中开始行号（可选）
+     * @param startColumn 选中开始列号（可选）
+     * @param endLine 选中结束行号（可选）
+     * @param endColumn 选中结束列号（可选）
      */
-    fun navigateToPosition(textEditor: TextEditor, line: Int, column: Int) {
-        val position = LogicalPosition(line, column)
+    fun handleSelectionAndNavigate(
+        textEditor: TextEditor,
+        line: Int,
+        column: Int,
+        startLine: Int? = null,
+        startColumn: Int? = null,
+        endLine: Int? = null,
+        endColumn: Int? = null
+    ) {
+        try {
+            log.info("准备处理选中和光标导航: 光标位置($line, $column), 选中范围(${startLine ?: "无"},${startColumn ?: "无"}-${endLine ?: "无"},${endColumn ?: "无"})")
 
-        ApplicationManager.getApplication().runWriteAction {
-            textEditor.editor.caretModel.moveToLogicalPosition(position)
+            ApplicationManager.getApplication().runWriteAction {
+                val selectionModel = textEditor.editor.selectionModel
 
-            // 智能滚动：只在光标不可见时才滚动
-            val visibleArea = textEditor.editor.scrollingModel.visibleArea
-            val targetPoint = textEditor.editor.logicalPositionToXY(position)
+                // 先处理选中状态
+                if (startLine != null && startColumn != null && endLine != null && endColumn != null) {
+                    // 有选中范围，设置选中
+                    val startPosition = LogicalPosition(startLine, startColumn)
+                    val endPosition = LogicalPosition(endLine, endColumn)
 
-            if (!visibleArea.contains(targetPoint)) {
-                textEditor.editor.scrollingModel.scrollToCaret(ScrollType.MAKE_VISIBLE)
-                log.info("光标位置不可见，执行滚动到: 行$line, 列$column")
+                    selectionModel.setSelection(
+                        textEditor.editor.logicalPositionToOffset(startPosition),
+                        textEditor.editor.logicalPositionToOffset(endPosition)
+                    )
+                    log.info("✅ 成功设置选中范围: (${startLine},${startColumn})-(${endLine},${endColumn})")
+                } else {
+                    // 无选中范围，清除选中
+                    selectionModel.removeSelection()
+                    log.info("✅ 成功清除选中状态")
+                }
+
+                // 然后移动光标到指定位置
+                val cursorPosition = LogicalPosition(line, column)
+                textEditor.editor.caretModel.moveToLogicalPosition(cursorPosition)
+                log.info("✅ 成功移动光标到位置: 行$line, 列$column")
+
+                // 确保光标位置在可视区域内
+                val visibleArea = textEditor.editor.scrollingModel.visibleArea
+                val targetPoint = textEditor.editor.logicalPositionToXY(cursorPosition)
+
+                if (!visibleArea.contains(targetPoint)) {
+                    textEditor.editor.scrollingModel.scrollToCaret(ScrollType.MAKE_VISIBLE)
+                    log.info("✅ 光标位置不可见，已执行滚动到: 行$line, 列$column")
+                } else {
+                    log.info("光标位置已在可视区域内，无需滚动")
+                }
             }
+            log.info("✅ 选中和光标导航处理完成")
+        } catch (e: Exception) {
+            log.warn("❌ 处理选中和光标导航失败: 光标位置($line, $column) - ${e.message}", e)
         }
     }
 }

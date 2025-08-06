@@ -22,6 +22,9 @@ class EventListenerManager(
 
     // 全局唯一的光标监听器引用
     private var currentCaretListener: com.intellij.openapi.editor.event.CaretListener? = null
+
+    // 全局唯一的选中监听器引用
+    private var currentSelectionListener: com.intellij.openapi.editor.event.SelectionListener? = null
     private var currentEditor: Editor? = null
     private var messageBusConnection: MessageBusConnection? = null
 
@@ -49,6 +52,8 @@ class EventListenerManager(
                         log.info("准备发送打开消息: $state")
                         editorStateManager.updateState(state)
                         setupCaretListener(it)
+                        setupSelectionListener(it)
+                        currentEditor = it
                     }
                 }
 
@@ -84,9 +89,11 @@ class EventListenerManager(
                             val state = editorStateManager.createEditorState(
                                 it, event.newFile!!, ActionType.NAVIGATE, windowStateManager.isWindowActive()
                             )
-                            log.info("准备发送导航消息: $state")
+                            log.info("准备发送导航消息: ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
                             editorStateManager.debouncedUpdateState(state)
                             setupCaretListener(it)
+                            setupSelectionListener(it)
+                            currentEditor = it
                         }
                     }
                 }
@@ -121,7 +128,7 @@ class EventListenerManager(
                     val state = editorStateManager.createEditorState(
                         event.editor, currentFile, ActionType.NAVIGATE, windowStateManager.isWindowActive()
                     )
-                    log.info("准备发送导航消息: $state")
+                    log.info("准备发送导航消息: ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
                     editorStateManager.debouncedUpdateState(state)
                 } else {
                     log.warn("事件-光标改变：无法获取当前文件，跳过处理")
@@ -134,9 +141,60 @@ class EventListenerManager(
 
         // 保存引用以便后续管理
         currentCaretListener = newCaretListener
-        currentEditor = editor
 
         log.info("光标监听器设置完成")
+    }
+
+    /**
+     * 设置选中监听器
+     * 全局唯一，每次设置新监听器时会销毁之前的监听器
+     */
+    private fun setupSelectionListener(editor: Editor) {
+        log.info("开始设置选中监听器")
+
+        // 销毁之前的选中监听器
+        destroyCurrentSelectionListener()
+
+        // 创建新的选中监听器
+        val newSelectionListener = object : com.intellij.openapi.editor.event.SelectionListener {
+            override fun selectionChanged(event: com.intellij.openapi.editor.event.SelectionEvent) {
+                log.info("事件-选中改变")
+                // 动态获取当前真正的文件
+                val currentFile = event.editor.virtualFile
+                if (currentFile != null) {
+                    if (!FileUtils.isRegularFile(currentFile)) {
+                        log.info("事件-选中改变: ${currentFile.path} - 非常规文件，已忽略")
+                        return
+                    }
+
+                    val selectionModel = event.editor.selectionModel
+                    val hasSelection = selectionModel.hasSelection()
+                    log.info("事件-选中改变: ${currentFile.path}, 是否有选中: $hasSelection")
+
+                    if (hasSelection) {
+                        val startPosition = event.editor.offsetToLogicalPosition(selectionModel.selectionStart)
+                        val endPosition = event.editor.offsetToLogicalPosition(selectionModel.selectionEnd)
+                        log.info("选中范围: ${startPosition.line},${startPosition.column}-${endPosition.line},${endPosition.column}")
+                    }
+
+                    val state = editorStateManager.createEditorState(
+                        event.editor, currentFile, ActionType.NAVIGATE, windowStateManager.isWindowActive()
+                    )
+                    log.info("准备发送导航消息: ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
+                    editorStateManager.debouncedUpdateState(state)
+                } else {
+                    log.warn("事件-选中改变：无法获取当前文件，跳过处理")
+                }
+            }
+        }
+
+        // 添加新的监听器
+        editor.selectionModel.addSelectionListener(newSelectionListener)
+
+        // 保存引用以便后续管理
+        currentSelectionListener = newSelectionListener
+
+        log.info("选中监听器设置完成")
     }
 
     /**
@@ -152,7 +210,22 @@ class EventListenerManager(
                 log.warn("销毁光标监听器时出现异常: ${e.message}")
             }
             currentCaretListener = null
-            currentEditor = null
+        }
+    }
+
+    /**
+     * 销毁当前的选中监听器
+     */
+    private fun destroyCurrentSelectionListener() {
+        if (currentSelectionListener != null && currentEditor != null) {
+            log.info("销毁之前的选中监听器")
+            try {
+                currentEditor!!.selectionModel.removeSelectionListener(currentSelectionListener!!)
+                log.info("选中监听器销毁成功")
+            } catch (e: Exception) {
+                log.warn("销毁选中监听器时出现异常: ${e.message}")
+            }
+            currentSelectionListener = null
         }
     }
 
@@ -165,6 +238,8 @@ class EventListenerManager(
         messageBusConnection?.disconnect()
         messageBusConnection?.dispose()
         destroyCurrentCaretListener()
+        destroyCurrentSelectionListener()
+        currentEditor = null
         log.info("EventListenerManager资源清理完成")
     }
 }

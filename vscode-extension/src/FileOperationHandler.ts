@@ -111,12 +111,27 @@ export class FileOperationHandler {
      * 处理文件打开和导航操作
      */
     async handleFileOpenOrNavigate(state: EditorState): Promise<void> {
-        this.logger.info(`进行文件导航操作: ${state.filePath}, 行${state.line}, 列${state.column}`)
+        if (state.hasSelection()) {
+            this.logger.info(`进行文件选中并导航操作: ${state.filePath}，导航到: ${state.getCursorInfo()} ${state.getSelectionInfoStr()}`);
+        } else {
+            this.logger.info(`进行文件导航操作: ${state.filePath}，导航到: ${state.getCursorInfo()}`);
+        }
+
         try {
             const editor = await FileUtils.openFileByPath(state.getCompatiblePath());
             if (editor) {
-                FileUtils.navigateToPosition(editor, state.line, state.column);
-                this.logger.info(`✅ 成功同步到文件: ${state.filePath}, 行${state.line}, 列${state.column}`);
+                // 使用统一的选中和光标处理逻辑
+                FileUtils.handleSelectionAndNavigate(
+                    editor,
+                    state.line,
+                    state.column,
+                    state.selectionStartLine,
+                    state.selectionStartColumn,
+                    state.selectionEndLine,
+                    state.selectionEndColumn
+                );
+            } else {
+                this.logger.warn(`无法打开文件进行导航: ${state.getCompatiblePath()}`);
             }
         } catch (error) {
             this.logger.warn('处理接收状态失败:', error as Error);

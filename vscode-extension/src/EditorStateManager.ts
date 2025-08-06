@@ -37,6 +37,9 @@ export class EditorStateManager {
     ): EditorState {
         const position = FileUtils.getEditorCursorPosition(editor);
 
+        // 获取选中范围坐标
+        const selectionCoordinates = FileUtils.getSelectionCoordinates(editor);
+
         return new EditorState(
             action,
             FileUtils.getEditorFilePath(editor),
@@ -44,7 +47,12 @@ export class EditorStateManager {
             position.column,
             SourceType.VSCODE,
             isActive,
-            formatTimestamp()
+            formatTimestamp(),
+            undefined, // openedFiles
+            selectionCoordinates?.startLine,
+            selectionCoordinates?.startColumn,
+            selectionCoordinates?.endLine,
+            selectionCoordinates?.endColumn
         );
     }
 
@@ -166,6 +174,10 @@ export class EditorStateManager {
             }
 
             const position = FileUtils.getEditorCursorPosition(activeEditor);
+
+            // 获取选中范围坐标
+            const selectionCoordinates = FileUtils.getSelectionCoordinates(activeEditor);
+
             return new EditorState(
                 ActionType.NAVIGATE,
                 FileUtils.getEditorFilePath(activeEditor),
@@ -173,7 +185,12 @@ export class EditorStateManager {
                 position.column,
                 SourceType.VSCODE,
                 isActive,
-                formatTimestamp()
+                formatTimestamp(),
+                undefined, // openedFiles
+                selectionCoordinates?.startLine,
+                selectionCoordinates?.startColumn,
+                selectionCoordinates?.endLine,
+                selectionCoordinates?.endColumn
             );
         } catch (error) {
             this.logger.warn('获取当前活跃编辑器状态失败:', error as Error);

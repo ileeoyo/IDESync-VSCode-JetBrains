@@ -6,7 +6,7 @@
 export enum ActionType {
     CLOSE = "CLOSE",        // 关闭文件
     OPEN = "OPEN",          // 打开文件
-    NAVIGATE = "NAVIGATE",  // 光标导航
+    NAVIGATE = "NAVIGATE",  // 光标导航和代码选中
     WORKSPACE_SYNC = "WORKSPACE_SYNC"  // 工作区状态同步
 }
 
@@ -42,6 +42,11 @@ export class EditorState {
     public isActive: boolean;         // IDE是否处于活跃状态
     public timestamp: string;         // 时间戳 (yyyy-MM-dd HH:mm:ss.SSS)
     public openedFiles?: string[];    // 工作区所有打开的文件（仅WORKSPACE_SYNC类型使用）
+    // 选中范围相关字段（NAVIGATE类型使用）
+    public selectionStartLine?: number;    // 选中开始行号（从0开始）
+    public selectionStartColumn?: number;  // 选中开始列号（从0开始）
+    public selectionEndLine?: number;      // 选中结束行号（从0开始）
+    public selectionEndColumn?: number;    // 选中结束列号（从0开始）
 
     // 平台兼容路径缓存
     private _compatiblePath?: string;
@@ -54,7 +59,11 @@ export class EditorState {
         source: SourceType = SourceType.VSCODE,
         isActive: boolean = false,
         timestamp: string = formatTimestamp(),
-        openedFiles?: string[]
+        openedFiles?: string[],
+        selectionStartLine?: number,
+        selectionStartColumn?: number,
+        selectionEndLine?: number,
+        selectionEndColumn?: number
     ) {
         this.action = action;
         this.filePath = filePath;
@@ -64,6 +73,10 @@ export class EditorState {
         this.isActive = isActive;
         this.timestamp = timestamp;
         this.openedFiles = openedFiles;
+        this.selectionStartLine = selectionStartLine;
+        this.selectionStartColumn = selectionStartColumn;
+        this.selectionEndLine = selectionEndLine;
+        this.selectionEndColumn = selectionEndColumn;
     }
 
     /**
@@ -152,6 +165,41 @@ export class EditorState {
         }
 
         return vscodePath;
+    }
+
+    /**
+     * 检查是否有选中范围
+     * @returns 如果有选中范围返回true，否则返回false
+     */
+    hasSelection(): boolean {
+        return this.selectionStartLine !== undefined &&
+            this.selectionEndLine !== undefined &&
+            this.selectionStartColumn !== undefined &&
+            this.selectionEndColumn !== undefined;
+    }
+
+    /**
+     * 获取格式化的选中范围字符串
+     * @returns 如果有选中范围，返回格式化字符串；否则返回undefined
+     */
+    getSelectionInfo(): string | undefined {
+        if (!this.hasSelection()) {
+            return undefined;
+        }
+
+        return `${this.selectionStartLine! + 1},${this.selectionStartColumn! + 1}-${this.selectionEndLine! + 1},${this.selectionEndColumn! + 1}`;
+    }
+
+    getSelectionInfoStr(): string | undefined {
+        return this.getSelectionInfo() ? `选中范围：${this.getSelectionInfo()}` : '无';
+    }
+
+    /**
+     * 获取格式化的光标位置字符串
+     * @returns 格式化的光标位置字符串
+     */
+    getCursorInfo(): string {
+        return `行${this.line + 1}, 列${this.column + 1}`;
     }
 }
 
@@ -258,7 +306,11 @@ export class MessageWrapper {
                 data.payload.source,
                 data.payload.isActive,
                 data.payload.timestamp,
-                data.payload.openedFiles
+                data.payload.openedFiles,
+                data.payload.selectionStartLine,
+                data.payload.selectionStartColumn,
+                data.payload.selectionEndLine,
+                data.payload.selectionEndColumn
             );
 
             return new MessageWrapper(

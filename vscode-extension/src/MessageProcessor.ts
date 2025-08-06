@@ -131,7 +131,7 @@ export class MessageProcessor {
             this.logger.info(`收到消息: ${message}`);
             const rawData = JSON.parse(message);
             const state = this.deserializeEditorState(rawData);
-            this.logger.info(`🍕解析消息: ${state.action} ${this.serializeState(state)}`)
+            this.logger.info(`🍕解析消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}`)
 
             // 验证消息有效性
             if (!this.isValidMessage(state)) {
@@ -151,7 +151,7 @@ export class MessageProcessor {
      */
     private async handleIncomingState(state: EditorState): Promise<void> {
         try {
-            this.logger.info(`🍕解析消息: ${state.action} ${this.serializeState(state)}`)
+            this.logger.info(`🍕解析消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}`)
 
             // 验证消息有效性
             if (!this.isValidMessage(state)) {
@@ -178,7 +178,11 @@ export class MessageProcessor {
             rawData.source,
             rawData.isActive,
             rawData.timestamp,
-            rawData.openedFiles
+            rawData.openedFiles,
+            rawData.selectionStartLine,
+            rawData.selectionStartColumn,
+            rawData.selectionEndLine,
+            rawData.selectionEndColumn
         );
     }
 
@@ -206,12 +210,5 @@ export class MessageProcessor {
         }
 
         return true;
-    }
-
-    /**
-     * 序列化状态为消息
-     */
-    serializeState(state: EditorState): string {
-        return JSON.stringify(state);
     }
 }

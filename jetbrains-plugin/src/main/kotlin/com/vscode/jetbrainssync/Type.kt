@@ -12,7 +12,7 @@ import java.util.*
 enum class ActionType {
     CLOSE,      // 关闭文件
     OPEN,       // 打开文件
-    NAVIGATE,   // 光标导航
+    NAVIGATE,   // 光标导航和代码选中
     WORKSPACE_SYNC  // 工作区状态同步
 }
 
@@ -47,7 +47,12 @@ data class EditorState(
     val source: SourceType = SourceType.JETBRAINS, // 消息来源枚举
     val isActive: Boolean = false,  // IDE是否处于活跃状态
     val timestamp: String = formatTimestamp(), // 时间戳 (yyyy-MM-dd HH:mm:ss.SSS)
-    val openedFiles: List<String>? = null  // 工作区所有打开的文件（仅WORKSPACE_SYNC类型使用）
+    val openedFiles: List<String>? = null,  // 工作区所有打开的文件（仅WORKSPACE_SYNC类型使用）
+    // 选中范围相关字段（NAVIGATE类型使用）
+    val selectionStartLine: Int? = null,    // 选中开始行号（从0开始）
+    val selectionStartColumn: Int? = null,  // 选中开始列号（从0开始）
+    val selectionEndLine: Int? = null,      // 选中结束行号（从0开始）
+    val selectionEndColumn: Int? = null     // 选中结束列号（从0开始）
 ) {
     // 平台兼容路径缓存
     @Transient
@@ -135,6 +140,42 @@ data class EditorState(
         }
 
         return ideaPath
+    }
+
+    /**
+     * 检查是否有选中范围
+     * @return 如果有选中范围返回true，否则返回false
+     */
+    fun hasSelection(): Boolean {
+        return selectionStartLine != null &&
+                selectionEndLine != null &&
+                selectionStartColumn != null &&
+                selectionEndColumn != null
+    }
+
+    /**
+     * 获取格式化的选中范围字符串
+     * @return 如果有选中范围，返回格式化字符串；否则返回null
+     */
+    fun getSelectionInfo(): String? {
+        if (!hasSelection()) {
+            return null
+        }
+
+        return "${selectionStartLine!! + 1},${selectionStartColumn!! + 1}-${selectionEndLine!! + 1},${selectionEndColumn!! + 1}"
+    }
+
+
+    fun getSelectionInfoStr(): String? {
+        return getSelectionInfo()?.let { "选中范围：$it" } ?: "无"
+    }
+
+    /**
+     * 获取格式化的光标位置字符串
+     * @return 格式化的光标位置字符串
+     */
+    fun getCursorInfo(): String {
+        return "行${line + 1}, 列${column + 1}"
     }
 }
 

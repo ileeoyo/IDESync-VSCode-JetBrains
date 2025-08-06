@@ -133,7 +133,7 @@ class MessageProcessor(
         try {
             log.info("收到消息: $message")
             val state = gson.fromJson(message, EditorState::class.java)
-            log.info("\uD83C\uDF55解析消息: ${state.action} ${serializeState(state)}")
+            log.info("\uD83C\uDF55解析消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
 
             // 验证消息有效性
             if (!isValidMessage(state)) {
@@ -153,7 +153,7 @@ class MessageProcessor(
      */
     private fun handleIncomingState(state: EditorState) {
         try {
-            log.info("\uD83C\uDF55解析消息: ${state.action} ${serializeState(state)}")
+            log.info("\uD83C\uDF55解析消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
 
             // 验证消息有效性
             if (!isValidMessage(state)) {
@@ -192,17 +192,5 @@ class MessageProcessor(
         }
 
         return true
-    }
-
-    /**
-     * 序列化状态为消息
-     */
-    fun serializeState(state: EditorState): String {
-        return try {
-            gson.toJson(state)
-        } catch (e: Exception) {
-            log.warn("序列化状态失败: ${e.message}", e)
-            ""
-        }
     }
 }

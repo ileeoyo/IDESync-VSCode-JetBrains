@@ -128,6 +128,27 @@ export class FileUtils {
     }
 
     /**
+     * 获取编辑器的选中范围坐标
+     * @param editor 文本编辑器
+     * @returns 选中范围坐标 {startLine, startColumn, endLine, endColumn}，如果没有选中则返回null
+     */
+    static getSelectionCoordinates(editor: vscode.TextEditor): { startLine: number, startColumn: number, endLine: number, endColumn: number } | null {
+        const selection = editor.selection;
+        const hasSelection = !selection.isEmpty;
+
+        if (hasSelection) {
+            return {
+                startLine: selection.start.line,
+                startColumn: selection.start.character,
+                endLine: selection.end.line,
+                endColumn: selection.end.character
+            };
+        } else {
+            return null;
+        }
+    }
+
+    /**
      * 获取当前活跃编辑器
      * @returns 返回当前活跃的TextEditor，如果没有则返回null
      */
@@ -217,24 +238,83 @@ export class FileUtils {
         }
     }
 
-    /**
-     * 导航到指定位置
-     * @param editor 文本编辑器
-     * @param line 行号
-     * @param column 列号
-     */
-    static navigateToPosition(editor: vscode.TextEditor, line: number, column: number): void {
-        const position = new vscode.Position(line, column);
-        editor.selection = new vscode.Selection(position, position);
 
-        // 智能滚动：只在光标不可见时才滚动
-        const visibleRange = editor.visibleRanges[0];
-        if (!visibleRange || !visibleRange.contains(position)) {
-            editor.revealRange(
-                new vscode.Range(position, position),
-                vscode.TextEditorRevealType.InCenter
-            );
-            this.logger.info(`光标位置不可见，执行滚动到: 行${line}, 列${column}`);
+    /**
+     * 统一处理选中和光标移动
+     * 支持光标在任意位置，不受选中范围限制
+     * @param editor 文本编辑器
+     * @param line 光标行号
+     * @param column 光标列号
+     * @param startLine 选中开始行号（可选）
+     * @param startColumn 选中开始列号（可选）
+     * @param endLine 选中结束行号（可选）
+     * @param endColumn 选中结束列号（可选）
+     */
+    static handleSelectionAndNavigate(
+        editor: vscode.TextEditor,
+        line: number,
+        column: number,
+        startLine?: number,
+        startColumn?: number,
+        endLine?: number,
+        endColumn?: number
+    ): void {
+        try {
+            this.logger.info(`准备处理选中和光标导航: 光标位置(${line}, ${column}), 选中范围(${startLine ?? '无'},${startColumn ?? '无'}-${endLine ?? '无'},${endColumn ?? '无'})`);
+
+            const cursorPosition = new vscode.Position(line, column);
+
+            // 检查是否有有效的选中范围参数
+            const hasValidSelection = startLine !== undefined && startColumn !== undefined &&
+                endLine !== undefined && endColumn !== undefined;
+
+            // 判断是否为非零长度的有效选中
+            const hasNonZeroSelection = hasValidSelection &&
+                !(startLine === endLine && startColumn === endColumn);
+
+            if (hasNonZeroSelection) {
+                // 处理有效选中范围，需要正确设置光标位置
+                const startPosition = new vscode.Position(startLine, startColumn);
+                const endPosition = new vscode.Position(endLine, endColumn);
+
+                // 通过距离判断选择方向：计算光标到选择开头和结尾的距离
+                // 如果光标更接近开头，说明是从下往上选择（锚点在结尾）
+                // 如果光标更接近结尾，说明是从上往下选择（锚点在开头）
+                const distanceToStart = Math.abs((line - startLine) * 1000 + (column - startColumn));
+                const distanceToEnd = Math.abs((line - endLine) * 1000 + (column - endColumn));
+                
+                if (distanceToStart < distanceToEnd) {
+                    // 光标更接近开始位置，从下往上选择
+                    // VSCode Selection构造函数：new Selection(anchor, active)
+                    // anchor是选择的锚点，active是光标的实际位置
+                    editor.selection = new vscode.Selection(endPosition, cursorPosition);
+                    this.logger.info(`✅ 成功设置选中范围（从下往上）: (${startLine},${startColumn})-(${endLine},${endColumn})，光标位置: (${line},${column})`);
+                } else {
+                    // 光标更接近结束位置，从上往下选择
+                    editor.selection = new vscode.Selection(startPosition, cursorPosition);
+                    this.logger.info(`✅ 成功设置选中范围（从上往下）: (${startLine},${startColumn})-(${endLine},${endColumn})，光标位置: (${line},${column})`);
+                }
+            } else {
+                // 清除选中状态，只设置光标位置
+                editor.selection = new vscode.Selection(cursorPosition, cursorPosition);
+                this.logger.info(`✅ 成功清除选中状态，光标位置: (${line},${column})`);
+            }
+
+            // 确保光标位置在可视区域内
+            const visibleRange = editor.visibleRanges[0];
+            if (!visibleRange || !visibleRange.contains(cursorPosition)) {
+                editor.revealRange(
+                    new vscode.Range(cursorPosition, cursorPosition),
+                    vscode.TextEditorRevealType.InCenter
+                );
+                this.logger.info(`✅ 光标位置不可见，已执行滚动到: 行${line}, 列${column}`);
+            } else {
+                this.logger.info(`光标位置已在可视区域内，无需滚动`);
+            }
+
+            this.logger.info(`✅ 选中和光标导航处理完成`);
+        } catch (error) {
+            this.logger.warn(`❌ 处理选中和光标导航失败: 光标位置(${line}, ${column})`, error as Error);
         }
     }
 

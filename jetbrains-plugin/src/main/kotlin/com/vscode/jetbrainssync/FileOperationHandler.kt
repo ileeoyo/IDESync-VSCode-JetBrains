@@ -105,16 +105,26 @@ class FileOperationHandler(
      * 处理文件打开和导航操作
      */
     private fun handleFileOpenOrNavigate(state: EditorState) {
-        log.info("进行文件导航操作: ${state.filePath}, 行${state.line}, 列${state.column}")
+        if (state.hasSelection()) {
+            log.info("进行文件选中并导航操作: ${state.filePath}，导航到: ${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
+        } else {
+            log.info("进行文件导航操作: ${state.filePath}，导航到: ${state.getCursorInfo()}")
+        }
 
-        val compatiblePath = state.getCompatiblePath()
-        val editor = FileUtils.openFileByPath(compatiblePath)
-
+        val editor = FileUtils.openFileByPath(state.getCompatiblePath())
         editor?.let { textEditor ->
-            FileUtils.navigateToPosition(textEditor, state.line, state.column)
-            log.info("✅ 成功同步到文件: ${compatiblePath}, 行${state.line}, 列${state.column}")
+            // 使用统一的选中和光标处理逻辑
+            FileUtils.handleSelectionAndNavigate(
+                textEditor,
+                state.line,
+                state.column,
+                state.selectionStartLine,
+                state.selectionStartColumn,
+                state.selectionEndLine,
+                state.selectionEndColumn
+            )
         } ?: run {
-            log.warn("无法打开文件进行导航: $compatiblePath")
+            log.warn("无法打开文件进行导航: ${state.getCompatiblePath()}")
         }
     }
 
