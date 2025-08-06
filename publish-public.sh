@@ -92,15 +92,35 @@ echo ">>>>> 5. 推送到远程 public 仓库..."
 git push public public-sync:main
 echo
 
-echo ">>>>> 6. 切换回 main 分支..."
+echo ">>>>> 6. 在 public-sync 分支创建版本标签..."
+# 询问是否需要创建标签
+read -p "是否需要创建版本标签？(y/N): " CREATE_TAG
+if [[ "$CREATE_TAG" =~ ^[Yy]$ ]]; then
+    read -p "请输入版本号 (如: v1.4.0): " VERSION_TAG
+    if [[ -n "$VERSION_TAG" ]]; then
+        echo "创建标签: $VERSION_TAG"
+        git tag -a "$VERSION_TAG" -m "$COMMIT_MSG"
+        echo "推送标签到 public 仓库..."
+        git push public "$VERSION_TAG"
+        echo "推送标签到 origin 仓库..."
+        git push origin "$VERSION_TAG"
+    else
+        echo "未提供版本号，跳过标签创建"
+    fi
+else
+    echo "跳过标签创建"
+fi
+echo
+
+echo ">>>>> 7. 切换回 main 分支..."
 git checkout main
 echo
 
-echo ">>>>> 7. 合并 public-sync 分支..."
+echo ">>>>> 8. 合并 public-sync 分支..."
 git merge public-sync
 echo
 
-echo ">>>>> 8. 推送 main 分支到远程..."
+echo ">>>>> 9. 推送 main 分支到远程..."
 git push
 echo
 
