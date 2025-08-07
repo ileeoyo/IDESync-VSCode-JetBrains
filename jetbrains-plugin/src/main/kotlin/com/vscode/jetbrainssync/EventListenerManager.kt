@@ -16,7 +16,8 @@ import com.intellij.util.messages.MessageBusConnection
 class EventListenerManager(
     private val project: Project,
     private val editorStateManager: EditorStateManager,
-    private val windowStateManager: WindowStateManager
+    private val windowStateManager: WindowStateManager,
+    private val fileUtils: FileUtils
 ) {
     private val log: Logger = Logger.getInstance(EventListenerManager::class.java)
 
@@ -39,7 +40,7 @@ class EventListenerManager(
             FileEditorManagerListener.FILE_EDITOR_MANAGER,
             object : FileEditorManagerListener {
                 override fun fileOpened(source: FileEditorManager, file: VirtualFile) {
-                    if (!FileUtils.isRegularFile(file)) {
+                    if (!fileUtils.isRegularFile(file)) {
                         log.info("事件-文件打开: ${file.path} - 非常规文件，已忽略")
                         return
                     }
@@ -58,14 +59,14 @@ class EventListenerManager(
                 }
 
                 override fun fileClosed(source: FileEditorManager, file: VirtualFile) {
-                    if (!FileUtils.isRegularFile(file)) {
+                    if (!fileUtils.isRegularFile(file)) {
                         log.info("事件-文件关闭: ${file.path} - 非常规文件，已忽略")
                         return
                     }
                     log.info("事件-文件关闭: ${file.path}")
 
                     // 检查文件是否在其他编辑器中仍然打开
-                    val isStillOpen = FileUtils.isFileOpenInOtherTabs(file)
+                    val isStillOpen = fileUtils.isFileOpenInOtherTabs(file)
                     if (isStillOpen) {
                         log.info("文件在其他编辑器中仍然打开，跳过关闭消息: ${file.path}")
                         return
@@ -79,12 +80,12 @@ class EventListenerManager(
 
                 override fun selectionChanged(event: FileEditorManagerEvent) {
                     if (event.newFile != null) {
-                        if (!FileUtils.isRegularFile(event.newFile!!)) {
+                        if (!fileUtils.isRegularFile(event.newFile!!)) {
                             log.info("事件-文件改变: ${event.newFile!!.path} - 非常规文件，已忽略")
                             return
                         }
                         log.info("事件-文件改变: ${event.newFile!!.path}")
-                        val (editor, _) = FileUtils.getCurrentActiveEditorAndFile()
+                        val (editor, _) = fileUtils.getCurrentActiveEditorAndFile()
                         editor?.let {
                             val state = editorStateManager.createEditorState(
                                 it, event.newFile!!, ActionType.NAVIGATE, windowStateManager.isWindowActive()
@@ -119,7 +120,7 @@ class EventListenerManager(
                 // 动态获取当前真正的文件
                 val currentFile = event.editor.virtualFile
                 if (currentFile != null) {
-                    if (!FileUtils.isRegularFile(currentFile)) {
+                    if (!fileUtils.isRegularFile(currentFile)) {
                         log.info("事件-光标改变: ${currentFile.path} - 非常规文件，已忽略")
                         return
                     }
@@ -162,7 +163,7 @@ class EventListenerManager(
                 // 动态获取当前真正的文件
                 val currentFile = event.editor.virtualFile
                 if (currentFile != null) {
-                    if (!FileUtils.isRegularFile(currentFile)) {
+                    if (!fileUtils.isRegularFile(currentFile)) {
                         log.info("事件-选中改变: ${currentFile.path} - 非常规文件，已忽略")
                         return
                     }

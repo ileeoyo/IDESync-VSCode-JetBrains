@@ -23,20 +23,21 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
     private val log: Logger = Logger.getInstance(VSCodeJetBrainsSyncService::class.java)
 
     // 核心组件
+    private val fileUtils = FileUtils(project, log)
+    private val localIdentifierManager = LocalIdentifierManager(project)
     private val windowStateManager = WindowStateManager(project)
-    private val editorStateManager = EditorStateManager(project)
-    private val eventListenerManager = EventListenerManager(project, editorStateManager, windowStateManager)
-    private val fileOperationHandler = FileOperationHandler(editorStateManager, windowStateManager)
+    private val editorStateManager = EditorStateManager(project, fileUtils)
+    private val eventListenerManager = EventListenerManager(project, editorStateManager, windowStateManager, fileUtils)
+    private val fileOperationHandler = FileOperationHandler(editorStateManager, windowStateManager, fileUtils)
     private val messageProcessor = MessageProcessor(fileOperationHandler)
-    private val multicastManager = MulticastManager(project, messageProcessor)
-    private val operationQueueProcessor = OperationQueueProcessor(multicastManager)
+    private val multicastManager = MulticastManager(project, messageProcessor, localIdentifierManager)
+    private val operationQueueProcessor = OperationQueueProcessor(multicastManager, localIdentifierManager)
 
 
     init {
         log.info("初始化VSCode-JetBrains同步服务（重构版）")
 
-        // 首先初始化 FileUtils
-        FileUtils.initialize(project, log)
+        // FileUtils 已在构造时初始化，无需额外初始化
 
         // 初始化窗口状态管理器
         windowStateManager.initialize()
@@ -173,6 +174,7 @@ class VSCodeJetBrainsSyncService(private val project: Project) : Disposable {
         multicastManager.dispose()
         editorStateManager.dispose()
         eventListenerManager.dispose()
+        windowStateManager.dispose()  // 清理窗口状态管理器
 
         log.info("同步服务资源清理完成")
     }

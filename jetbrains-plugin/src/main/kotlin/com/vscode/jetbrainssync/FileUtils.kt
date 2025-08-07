@@ -16,19 +16,7 @@ import java.io.File
  * 文件工具类
  * 提供文件操作相关的工具方法
  */
-object FileUtils {
-    private lateinit var project: Project
-    private lateinit var log: Logger
-
-    /**
-     * 初始化工具类
-     * @param project 项目实例
-     * @param log 日志记录器
-     */
-    fun initialize(project: Project, log: Logger) {
-        this.project = project
-        this.log = log
-    }
+class FileUtils(private val project: Project, private val log: Logger) {
 
     /**
      * 检查文件是否在其他编辑器中仍然打开

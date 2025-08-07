@@ -20,7 +20,8 @@ import kotlin.concurrent.thread
  */
 class MulticastManager(
     private val project: Project,
-    private val messageProcessor: MessageProcessor
+    private val messageProcessor: MessageProcessor,
+    private val localIdentifierManager: LocalIdentifierManager
 ) {
     private val log: Logger = Logger.getInstance(MulticastManager::class.java)
 
@@ -267,7 +268,7 @@ class MulticastManager(
      */
     private fun handleReceivedMessage(message: String) {
         try {
-            messageProcessor.handleMessage(message, LocalIdentifierManager.identifier)
+            messageProcessor.handleMessage(message, localIdentifierManager.identifier)
         } catch (e: Exception) {
             log.warn("处理接收到的消息时发生错误: ${e.message}", e)
         }
@@ -422,6 +423,4 @@ class MulticastManager(
     fun isConnecting(): Boolean = connectionState.get() == ConnectionState.CONNECTING
     fun isDisconnected(): Boolean = connectionState.get() == ConnectionState.DISCONNECTED
     fun getConnectionState(): ConnectionState = connectionState.get()
-    fun getLocalIdentifier(): String = LocalIdentifierManager.identifier
-
 } 

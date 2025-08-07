@@ -220,25 +220,15 @@ data class MessageWrapper(
     val payload: EditorState
 ) {
     companion object {
-        private var messageSequence = java.util.concurrent.atomic.AtomicLong(0)
         private val gson = com.google.gson.Gson()
 
         /**
-         * 生成消息ID
-         * 格式: {localIdentifier}-{sequence}-{timestamp}
-         */
-        fun generateMessageId(localIdentifier: String): String {
-            val sequence = messageSequence.incrementAndGet()
-            val timestamp = System.currentTimeMillis()
-            return "$localIdentifier-$sequence-$timestamp"
-        }
-
-        /**
          * 创建消息包装器
+         * 注意：messageId 现在通过 LocalIdentifierManager.generateMessageId() 生成
          */
-        fun create(localIdentifier: String, payload: EditorState): MessageWrapper {
+        fun create(messageId: String, localIdentifier: String, payload: EditorState): MessageWrapper {
             return MessageWrapper(
-                messageId = generateMessageId(localIdentifier),
+                messageId = messageId,
                 senderId = localIdentifier,
                 timestamp = System.currentTimeMillis(),
                 payload = payload

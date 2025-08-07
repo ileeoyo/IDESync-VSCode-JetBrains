@@ -14,6 +14,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class OperationQueueProcessor(
     private val multicastManager: MulticastManager,
+    private val localIdentifierManager: LocalIdentifierManager
 ) {
     private val log: Logger = Logger.getInstance(OperationQueueProcessor::class.java)
 
@@ -95,7 +96,9 @@ class OperationQueueProcessor(
      */
     private fun sendStateUpdate(state: EditorState) {
         val messageWrapper = MessageWrapper.create(
-            LocalIdentifierManager.identifier, state
+            localIdentifierManager.generateMessageId(),
+            localIdentifierManager.identifier,
+            state
         )
         val success = multicastManager.sendMessage(messageWrapper)
         if (success) {

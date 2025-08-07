@@ -14,7 +14,8 @@ import kotlin.concurrent.write
  * 负责管理编辑器状态的缓存、防抖和去重逻辑
  */
 class EditorStateManager(
-    private val project: Project
+    private val project: Project,
+    private val fileUtils: FileUtils
 ) {
     private val log: Logger = Logger.getInstance(EditorStateManager::class.java)
 
@@ -47,14 +48,14 @@ class EditorStateManager(
         action: ActionType,
         isActive: Boolean = false
     ): EditorState {
-        val (line, column) = FileUtils.getEditorCursorPosition(editor)
+        val (line, column) = fileUtils.getEditorCursorPosition(editor)
 
         // 获取选中范围坐标
-        val selectionCoordinates = FileUtils.getSelectionCoordinates(editor)
+        val selectionCoordinates = fileUtils.getSelectionCoordinates(editor)
 
         return EditorState(
             action = action,
-            filePath = FileUtils.getVirtualFilePath(file),
+            filePath = fileUtils.getVirtualFilePath(file),
             line = line,
             column = column,
             source = SourceType.JETBRAINS,
@@ -88,11 +89,11 @@ class EditorStateManager(
      * 创建工作区同步状态
      */
     fun createWorkspaceSyncState(isActive: Boolean = false): EditorState {
-        val (editor, file) = FileUtils.getCurrentActiveEditorAndFile()
-        val openedFiles = FileUtils.getAllOpenedFiles()
+        val (editor, file) = fileUtils.getCurrentActiveEditorAndFile()
+        val openedFiles = fileUtils.getAllOpenedFiles()
 
-        return if (editor != null && file != null && FileUtils.isRegularFile(file)) {
-            val (line, column) = FileUtils.getEditorCursorPosition(editor)
+        return if (editor != null && file != null && fileUtils.isRegularFile(file)) {
+            val (line, column) = fileUtils.getEditorCursorPosition(editor)
             EditorState(
                 action = ActionType.WORKSPACE_SYNC,
                 filePath = file.path,
@@ -199,17 +200,17 @@ class EditorStateManager(
      */
     fun getCurrentActiveEditorState(isActive: Boolean): EditorState? {
         return try {
-            val (editor, file) = FileUtils.getCurrentActiveEditorAndFile()
+            val (editor, file) = fileUtils.getCurrentActiveEditorAndFile()
 
-            if (editor != null && file != null && FileUtils.isRegularFile(file)) {
-                val position = FileUtils.getEditorCursorPosition(editor)
+            if (editor != null && file != null && fileUtils.isRegularFile(file)) {
+                val position = fileUtils.getEditorCursorPosition(editor)
 
                 // 获取选中范围坐标
-                val selectionCoordinates = FileUtils.getSelectionCoordinates(editor)
+                val selectionCoordinates = fileUtils.getSelectionCoordinates(editor)
 
                 EditorState(
                     action = ActionType.NAVIGATE,
-                    filePath = FileUtils.getVirtualFilePath(file),
+                    filePath = fileUtils.getVirtualFilePath(file),
                     line = position.first,
                     column = position.second,
                     source = SourceType.JETBRAINS,

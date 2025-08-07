@@ -94,9 +94,9 @@ echo
 
 echo ">>>>> 6. 在 public-sync 分支创建版本标签..."
 # 询问是否需要创建标签
-read -p "是否需要创建版本标签？(y/N): " CREATE_TAG
+read -r -p "是否需要创建版本标签？(y/N): " CREATE_TAG
 if [[ "$CREATE_TAG" =~ ^[Yy]$ ]]; then
-    read -p "请输入版本号 (如: v1.4.0): " VERSION_TAG
+    read -r -p "请输入版本号 (如: v1.4.0): " VERSION_TAG
     if [[ -n "$VERSION_TAG" ]]; then
         echo "创建标签: $VERSION_TAG"
         git tag -a "$VERSION_TAG" -m "$COMMIT_MSG"

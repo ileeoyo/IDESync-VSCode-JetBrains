@@ -9,7 +9,8 @@ import com.intellij.openapi.diagnostic.Logger
  */
 class FileOperationHandler(
     private val editorStateManager: EditorStateManager,
-    private val windowStateManager: WindowStateManager
+    private val windowStateManager: WindowStateManager,
+    private val fileUtils: FileUtils
 ) {
     private val log: Logger = Logger.getInstance(FileOperationHandler::class.java)
 
@@ -36,7 +37,7 @@ class FileOperationHandler(
     private fun handleFileClose(state: EditorState) {
         log.info("进行文件关闭操作: ${state.filePath}")
         val compatiblePath = state.getCompatiblePath()
-        FileUtils.closeFileByPath(compatiblePath)
+        fileUtils.closeFileByPath(compatiblePath)
     }
 
     /**
@@ -59,7 +60,7 @@ class FileOperationHandler(
             log.info("保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}");
 
             // 获取当前所有打开的文件
-            val currentOpenedFiles = FileUtils.getAllOpenedFiles()
+            val currentOpenedFiles = fileUtils.getAllOpenedFiles()
             val targetFiles = state.openedFiles.map { filePath ->
                 // 创建临时EditorState以使用路径转换逻辑
                 val tempState = EditorState(ActionType.OPEN, filePath, 0, 0)
@@ -68,29 +69,33 @@ class FileOperationHandler(
 
             log.info("当前打开文件: ${currentOpenedFiles.size}个")
             log.info("目标文件: ${targetFiles.size}个")
-            log.info("当前打开的常规文件列表: ${currentOpenedFiles.joinToString(", ") { FileUtils.extractFileName(it) }}")
+            log.info("当前打开的常规文件列表: ${currentOpenedFiles.joinToString(", ") { fileUtils.extractFileName(it) }}")
 
             // 关闭多余的文件（当前打开但目标中不存在的文件）
             val filesToClose = currentOpenedFiles.filter { file -> !targetFiles.contains(file) }
             for (fileToClose in filesToClose) {
-                FileUtils.closeFileByPath(fileToClose)
+                fileUtils.closeFileByPath(fileToClose)
             }
 
             // 打开缺失的文件（目标中存在但当前未打开的文件）
             val filesToOpen = targetFiles.filter { file -> !currentOpenedFiles.contains(file) }
             for (fileToOpen in filesToOpen) {
-                FileUtils.openFileByPath(fileToOpen)
+                fileUtils.openFileByPath(fileToOpen)
             }
 
             // 再次获取当前编辑器活跃状态（防止状态延迟变更）
             currentActiveState = isCurrentEditorActive();
-            if (currentActiveState && savedActiveEditorState != null) {
-                log.info("恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}")
-                handleFileOpenOrNavigate(savedActiveEditorState)
+            if (currentActiveState) {
+                if (savedActiveEditorState != null) {
+                    log.info("恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}")
+                    handleFileOpenOrNavigate(savedActiveEditorState)
 
-                // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
-                editorStateManager.sendCurrentState(true)
-                log.info("已发送当前活跃编辑器状态给其他编辑器")
+                    // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
+                    editorStateManager.sendCurrentState(true)
+                    log.info("已发送当前活跃编辑器状态给其他编辑器")
+                } else {
+                    log.info("没有保存的活跃编辑器状态，不进行恢复")
+                }
             } else {
                 handleFileOpenOrNavigate(state)
             }
@@ -111,10 +116,10 @@ class FileOperationHandler(
             log.info("进行文件导航操作: ${state.filePath}，导航到: ${state.getCursorInfo()}")
         }
 
-        val editor = FileUtils.openFileByPath(state.getCompatiblePath())
+        val editor = fileUtils.openFileByPath(state.getCompatiblePath())
         editor?.let { textEditor ->
             // 使用统一的选中和光标处理逻辑
-            FileUtils.handleSelectionAndNavigate(
+            fileUtils.handleSelectionAndNavigate(
                 textEditor,
                 state.line,
                 state.column,
