@@ -88,10 +88,10 @@ class EventListenerManager(
                         val (editor, _) = fileUtils.getCurrentActiveEditorAndFile()
                         editor?.let {
                             val state = editorStateManager.createEditorState(
-                                it, event.newFile!!, ActionType.NAVIGATE, windowStateManager.isWindowActive()
+                                it, event.newFile!!, ActionType.OPEN, windowStateManager.isWindowActive()
                             )
-                            log.info("准备发送导航消息: ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
-                            editorStateManager.debouncedUpdateState(state)
+                            log.info("准备发送打开消息: ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+                            editorStateManager.updateState(state)
                             setupCaretListener(it)
                             setupSelectionListener(it)
                             currentEditor = it
@@ -102,6 +102,53 @@ class EventListenerManager(
         )
         log.info("编辑器监听器设置完成")
     }
+
+
+    /**
+     * 统一处理编辑器光标和选中事件
+     * @param editor 编辑器实例
+     * @param eventType 事件类型（"光标改变" 或 "选中改变"）
+     */
+    private fun handleEditorPositionOrSelectionEvent(editor: Editor, eventType: String) {
+        log.info("事件-$eventType")
+
+        // 动态获取当前真正的文件
+        val currentFile = editor.virtualFile
+        if (currentFile == null) {
+            log.warn("事件-$eventType：无法获取当前文件，跳过处理")
+            return
+        }
+        if (!fileUtils.isRegularFile(currentFile)) {
+            log.info("事件-$eventType: ${currentFile.path} - 非常规文件，已忽略")
+            return
+        }
+
+        // 获取光标位置信息
+        val caretModel = editor.caretModel
+        val logicalPosition = caretModel.logicalPosition
+        var logMessage = "事件-$eventType: ${currentFile.path}，${LogFormatter.cursorLog(logicalPosition.line, logicalPosition.column)}"
+
+        // 添加选中信息（无论事件类型）
+        val selectionModel = editor.selectionModel
+        val hasSelection = selectionModel.hasSelection()
+
+        if (hasSelection) {
+            val startPosition = editor.offsetToLogicalPosition(selectionModel.selectionStart)
+            val endPosition = editor.offsetToLogicalPosition(selectionModel.selectionEnd)
+            logMessage += "，${LogFormatter.selectionLog(startPosition.line, startPosition.column, endPosition.line, endPosition.column)}"
+        } else {
+            logMessage += "，${LogFormatter.selectionLog(null, null, null, null)}"
+        }
+
+        log.info(logMessage)
+
+        val state = editorStateManager.createEditorState(
+            editor, currentFile, ActionType.NAVIGATE, windowStateManager.isWindowActive()
+        )
+        log.info("准备发送导航消息: ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+        editorStateManager.debouncedUpdateState(state)
+    }
+
 
     /**
      * 设置光标监听器
@@ -116,24 +163,7 @@ class EventListenerManager(
         // 创建新的光标监听器
         val newCaretListener = object : com.intellij.openapi.editor.event.CaretListener {
             override fun caretPositionChanged(event: com.intellij.openapi.editor.event.CaretEvent) {
-                log.info("事件-光标改变")
-                // 动态获取当前真正的文件
-                val currentFile = event.editor.virtualFile
-                if (currentFile != null) {
-                    if (!fileUtils.isRegularFile(currentFile)) {
-                        log.info("事件-光标改变: ${currentFile.path} - 非常规文件，已忽略")
-                        return
-                    }
-                    log.info("事件-光标改变： 当前文件: ${currentFile.path}, 光标位置: 行${event.newPosition.line + 1}, 列${event.newPosition.column + 1}")
-
-                    val state = editorStateManager.createEditorState(
-                        event.editor, currentFile, ActionType.NAVIGATE, windowStateManager.isWindowActive()
-                    )
-                    log.info("准备发送导航消息: ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
-                    editorStateManager.debouncedUpdateState(state)
-                } else {
-                    log.warn("事件-光标改变：无法获取当前文件，跳过处理")
-                }
+                handleEditorPositionOrSelectionEvent(event.editor, "光标改变")
             }
         }
 
@@ -159,33 +189,7 @@ class EventListenerManager(
         // 创建新的选中监听器
         val newSelectionListener = object : com.intellij.openapi.editor.event.SelectionListener {
             override fun selectionChanged(event: com.intellij.openapi.editor.event.SelectionEvent) {
-                log.info("事件-选中改变")
-                // 动态获取当前真正的文件
-                val currentFile = event.editor.virtualFile
-                if (currentFile != null) {
-                    if (!fileUtils.isRegularFile(currentFile)) {
-                        log.info("事件-选中改变: ${currentFile.path} - 非常规文件，已忽略")
-                        return
-                    }
-
-                    val selectionModel = event.editor.selectionModel
-                    val hasSelection = selectionModel.hasSelection()
-                    log.info("事件-选中改变: ${currentFile.path}, 是否有选中: $hasSelection")
-
-                    if (hasSelection) {
-                        val startPosition = event.editor.offsetToLogicalPosition(selectionModel.selectionStart)
-                        val endPosition = event.editor.offsetToLogicalPosition(selectionModel.selectionEnd)
-                        log.info("选中范围: ${startPosition.line},${startPosition.column}-${endPosition.line},${endPosition.column}")
-                    }
-
-                    val state = editorStateManager.createEditorState(
-                        event.editor, currentFile, ActionType.NAVIGATE, windowStateManager.isWindowActive()
-                    )
-                    log.info("准备发送导航消息: ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
-                    editorStateManager.debouncedUpdateState(state)
-                } else {
-                    log.warn("事件-选中改变：无法获取当前文件，跳过处理")
-                }
+                handleEditorPositionOrSelectionEvent(event.editor, "选中改变")
             }
         }
 

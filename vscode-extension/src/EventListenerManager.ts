@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import {ActionType} from './Type';
+import {ActionType, LogFormatter} from './Type';
 import {Logger} from './Logger';
 import {EditorStateManager} from './EditorStateManager';
 import {FileUtils} from './FileUtils';
@@ -93,18 +93,20 @@ export class EventListenerManager {
                 const cursorPosition = selection.active;
                 const filePath = event.textEditor.document.uri.fsPath;
 
-                this.logger.info(`事件-选中改变: ${filePath}, 光标位置: 行${cursorPosition.line + 1}, 列${cursorPosition.character + 1}, 是否有选中: ${hasSelection}`);
+                let logMessage = `事件-选中改变: ${filePath}，${LogFormatter.cursorLog(cursorPosition.line, cursorPosition.character)}`;
 
                 if (hasSelection) {
-                    this.logger.info(`选中范围: ${selection.start.line + 1},${selection.start.character + 1}-${selection.end.line + 1},${selection.end.character + 1}`);
+                    logMessage += `，${LogFormatter.selectionLog(selection.start.line, selection.start.character, selection.end.line, selection.end.character)}`;
+                } else {
+                    logMessage += `，${LogFormatter.selectionLog()}`;
                 }
+                this.logger.info(logMessage);
 
                 if (event.textEditor === FileUtils.getCurrentActiveEditor()) {
                     const state = this.editorStateManager.createEditorState(
                         event.textEditor, ActionType.NAVIGATE, this.windowStateManager.isWindowActive()
                     );
-                    const selectionInfo = state.hasSelection() ? `有(${state.getSelectionInfo()})` : '无';
-                    this.logger.info(`准备发送导航消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}`);
+                    this.logger.info(`准备发送导航消息: ${state.action} ${state.filePath}，${state.getSelectionLog()}，${state.getSelectionLog()}`);
                     this.editorStateManager.debouncedUpdateState(state);
                 }
             })

@@ -60,6 +60,11 @@
     ]]></description>
     <depends>com.intellij.modules.platform</depends>
     <change-notes><![CDATA[
+        <h3>Version 1.4.1</h3>
+        <p><strong>Changed</strong></p>
+        <ul>
+            <li>代码优化：优化日志输出，优化文件操作，优化工作空间同步</li>
+        </ul>
         <h3>Version 1.4.0</h3>
         <p><strong>Changed</strong></p>
         <ul>

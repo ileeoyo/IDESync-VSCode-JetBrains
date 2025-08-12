@@ -42,7 +42,7 @@ export class OperationQueueProcessor {
         }
 
         this.operationQueue.push(state);
-        this.logger.info(`操作已推入队列：${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}`)
+        this.logger.info(`操作已推入队列：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}`)
     }
 
     /**
@@ -103,9 +103,9 @@ export class OperationQueueProcessor {
 
         const success = this.multicastManager.sendMessage(messageWrapper);
         if (success) {
-            this.logger.info(`✅ 发送组播消息：${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}`)
+            this.logger.info(`✅ 发送组播消息：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}`)
         } else {
-            this.logger.info(`❌ 发送组播消息失败：${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}`)
+            this.logger.info(`❌ 发送组播消息失败：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}`)
         }
     }
 

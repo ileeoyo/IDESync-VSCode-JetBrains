@@ -153,29 +153,26 @@ data class EditorState(
                 selectionEndColumn != null
     }
 
-    /**
-     * 获取格式化的选中范围字符串
-     * @return 如果有选中范围，返回格式化字符串；否则返回null
-     */
-    fun getSelectionInfo(): String? {
-        if (!hasSelection()) {
-            return null
-        }
 
-        return "${selectionStartLine!! + 1},${selectionStartColumn!! + 1}-${selectionEndLine!! + 1},${selectionEndColumn!! + 1}"
-    }
+    fun getSelectionLog(): String {
+        return LogFormatter.selectionLog(selectionStartLine, selectionStartColumn, selectionEndLine, selectionEndColumn)
 
-
-    fun getSelectionInfoStr(): String? {
-        return getSelectionInfo()?.let { "选中范围：$it" } ?: "无"
     }
 
     /**
      * 获取格式化的光标位置字符串
      * @return 格式化的光标位置字符串
      */
-    fun getCursorInfo(): String {
-        return "行${line + 1}, 列${column + 1}"
+    fun getCursorLog(): String {
+        return LogFormatter.cursorLog(line, column)
+    }
+
+    /**
+     * 获取格式化的光标位置字符串
+     * @return 格式化的光标位置字符串
+     */
+    fun getCursor(): String {
+        return LogFormatter.cursor(line, column) ?: "无"
     }
 }
 
@@ -187,6 +184,56 @@ data class EditorState(
 fun formatTimestamp(timestamp: Long = System.currentTimeMillis()): String {
     val formatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSS")
     return formatter.format(Date(timestamp))
+}
+
+/**
+ * 位置格式化工具类
+ * 提供光标位置和选中范围的统一格式化方法
+ */
+object LogFormatter {
+
+    /**
+     * 格式化光标位置
+     * @param line 行号（从0开始）
+     * @param column 列号（从0开始）
+     * @return 格式化的光标位置字符串："行X,列Y"
+     */
+    fun cursor(line: Int?, column: Int?): String? {
+        if (line == null || column == null) {
+            return null;
+        }
+        return "行${line + 1},列${column + 1}"
+    }
+
+    /**
+     * 格式化光标位置日志信息
+     * @param line 行号（从0开始）
+     * @param column 列号（从0开始）
+     * @return 格式化的光标位置日志字符串："光标位置：行X,列Y"
+     */
+    fun cursorLog(line: Int?, column: Int?): String {
+        return "光标位置：${cursor(line, column) ?: "无"}"
+    }
+
+    /**
+     * 格式化选中范围
+     * @param startLine 开始行号（从0开始）
+     * @param startColumn 开始列号（从0开始）
+     * @param endLine 结束行号（从0开始）
+     * @param endColumn 结束列号（从0开始）
+     * @return 格式化的选中范围字符串："startLine,startColumn-endLine,endColumn"
+     */
+    fun selection(startLine: Int?, startColumn: Int?, endLine: Int?, endColumn: Int?): String? {
+        if (startLine == null || startColumn == null || endLine == null || endColumn == null) {
+            return null
+        }
+        return "${startLine + 1},${startColumn + 1}-${endLine + 1},${endColumn + 1}"
+    }
+
+
+    fun selectionLog(startLine: Int?, startColumn: Int?, endLine: Int?, endColumn: Int?): String {
+        return "选中范围：${selection(startLine, startColumn, endLine, endColumn) ?: "无"}"
+    }
 }
 
 /**

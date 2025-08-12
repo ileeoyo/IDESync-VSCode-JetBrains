@@ -11,7 +11,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * 负责WebSocket消息的序列化、反序列化和路由处理
  */
 class MessageProcessor(
-    private val fileOperationHandler: FileOperationHandler
+    private val fileOperationHandler: FileOperationHandler,
+    private val localIdentifierManager: LocalIdentifierManager
 ) {
     private val log: Logger = Logger.getInstance(MessageProcessor::class.java)
     private val gson = Gson()
@@ -53,10 +54,13 @@ class MessageProcessor(
      * 处理组播消息
      * 包含消息解析、去重检查、自己消息过滤等逻辑
      */
-    fun handleMessage(message: String, localIdentifier: String): Boolean {
+    fun handleMessage(message: String): Boolean {
         try {
             val messageData = parseMessageData(message)
             if (messageData == null) return false
+
+            // 获取本地标识符
+            val localIdentifier = localIdentifierManager.identifier
 
             // 检查是否是自己发送的消息
             if (messageData.isOwnMessage(localIdentifier)) {
@@ -133,7 +137,7 @@ class MessageProcessor(
         try {
             log.info("收到消息: $message")
             val state = gson.fromJson(message, EditorState::class.java)
-            log.info("\uD83C\uDF55解析消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
+            log.info("\uD83C\uDF55解析消息: ${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
 
             // 验证消息有效性
             if (!isValidMessage(state)) {
@@ -153,7 +157,7 @@ class MessageProcessor(
      */
     private fun handleIncomingState(state: EditorState) {
         try {
-            log.info("\uD83C\uDF55解析消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
+            log.info("\uD83C\uDF55解析消息: ${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
 
             // 验证消息有效性
             if (!isValidMessage(state)) {

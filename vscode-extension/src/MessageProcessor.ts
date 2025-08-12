@@ -1,6 +1,7 @@
 import {EditorState, MessageWrapper, parseTimestamp} from './Type';
 import {Logger} from './Logger';
 import {FileOperationHandler} from './FileOperationHandler';
+import {LocalIdentifierManager} from './LocalIdentifierManager';
 
 /**
  * 消息处理器
@@ -52,10 +53,13 @@ export class MessageProcessor {
      * 处理组播消息
      * 包含消息解析、去重检查、自己消息过滤等逻辑
      */
-    handleMessage(message: string, localIdentifier: string): boolean {
+    handleMessage(message: string): boolean {
         try {
             const messageData = this.parseMessageData(message);
             if (!messageData) return false;
+
+            // 获取本地标识符
+            const localIdentifier = LocalIdentifierManager.getInstance().identifier;
 
             // 检查是否是自己发送的消息
             if (messageData.isOwnMessage(localIdentifier)) {
@@ -131,7 +135,7 @@ export class MessageProcessor {
             this.logger.info(`收到消息: ${message}`);
             const rawData = JSON.parse(message);
             const state = this.deserializeEditorState(rawData);
-            this.logger.info(`🍕解析消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}`)
+            this.logger.info(`🍕解析消息: ${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}`)
 
             // 验证消息有效性
             if (!this.isValidMessage(state)) {
@@ -151,7 +155,7 @@ export class MessageProcessor {
      */
     private async handleIncomingState(state: EditorState): Promise<void> {
         try {
-            this.logger.info(`🍕解析消息: ${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}`)
+            this.logger.info(`🍕解析消息: ${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}`)
 
             // 验证消息有效性
             if (!this.isValidMessage(state)) {

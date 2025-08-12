@@ -179,27 +179,27 @@ export class EditorState {
     }
 
     /**
-     * 获取格式化的选中范围字符串
-     * @returns 如果有选中范围，返回格式化字符串；否则返回undefined
+     * 获取格式化的选中范围日志字符串
+     * @returns 格式化的选中范围日志字符串："选中范围：X"
      */
-    getSelectionInfo(): string | undefined {
-        if (!this.hasSelection()) {
-            return undefined;
-        }
-
-        return `${this.selectionStartLine! + 1},${this.selectionStartColumn! + 1}-${this.selectionEndLine! + 1},${this.selectionEndColumn! + 1}`;
+    getSelectionLog(): string {
+        return LogFormatter.selectionLog(this.selectionStartLine, this.selectionStartColumn, this.selectionEndLine, this.selectionEndColumn);
     }
 
-    getSelectionInfoStr(): string | undefined {
-        return this.getSelectionInfo() ? `选中范围：${this.getSelectionInfo()}` : '无';
+    /**
+     * 获取格式化的光标位置日志字符串
+     * @returns 格式化的光标位置日志字符串："光标位置：行X,列Y"
+     */
+    getCursorLog(): string {
+        return LogFormatter.cursorLog(this.line, this.column);
     }
 
     /**
      * 获取格式化的光标位置字符串
-     * @returns 格式化的光标位置字符串
+     * @return 格式化的光标位置字符串
      */
-    getCursorInfo(): string {
-        return `行${this.line + 1}, 列${this.column + 1}`;
+    getCursor(): string {
+        return LogFormatter.cursor(this.line, this.column) || "无";
     }
 }
 
@@ -220,6 +220,63 @@ export function formatTimestamp(timestamp?: number): string {
     const milliseconds = String(date.getMilliseconds()).padStart(3, '0');
 
     return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}.${milliseconds}`;
+}
+
+/**
+ * 位置格式化工具类
+ * 提供光标位置和选中范围的统一格式化方法
+ */
+export class LogFormatter {
+
+    /**
+     * 格式化光标位置
+     * @param line 行号（从0开始）
+     * @param column 列号（从0开始）
+     * @returns 格式化的光标位置字符串："行X,列Y"，如果参数为undefined则返回null
+     */
+    static cursor(line?: number, column?: number): string | null {
+        if (line === undefined || column === undefined) {
+            return null;
+        }
+        return `行${line + 1},列${column + 1}`;
+    }
+
+    /**
+     * 格式化光标位置日志信息
+     * @param line 行号（从0开始）
+     * @param column 列号（从0开始）
+     * @returns 格式化的光标位置日志字符串："光标位置：行X,列Y"
+     */
+    static cursorLog(line?: number, column?: number): string {
+        return `光标位置：${this.cursor(line, column) || "无"}`;
+    }
+
+    /**
+     * 格式化选中范围
+     * @param startLine 开始行号（从0开始）
+     * @param startColumn 开始列号（从0开始）
+     * @param endLine 结束行号（从0开始）
+     * @param endColumn 结束列号（从0开始）
+     * @returns 格式化的选中范围字符串："startLine,startColumn-endLine,endColumn"，如果参数为undefined则返回null
+     */
+    static selection(startLine?: number, startColumn?: number, endLine?: number, endColumn?: number): string | null {
+        if (startLine === undefined || startColumn === undefined || endLine === undefined || endColumn === undefined) {
+            return null;
+        }
+        return `${startLine + 1},${startColumn + 1}-${endLine + 1},${endColumn + 1}`;
+    }
+
+    /**
+     * 格式化选中范围日志信息
+     * @param startLine 开始行号（从0开始）
+     * @param startColumn 开始列号（从0开始）
+     * @param endLine 结束行号（从0开始）
+     * @param endColumn 结束列号（从0开始）
+     * @returns 格式化的选中范围日志字符串："选中范围：X"
+     */
+    static selectionLog(startLine?: number, startColumn?: number, endLine?: number, endColumn?: number): string {
+        return `选中范围：${this.selection(startLine, startColumn, endLine, endColumn) || "无"}`;
+    }
 }
 
 /**

@@ -21,7 +21,6 @@ import kotlin.concurrent.thread
 class MulticastManager(
     private val project: Project,
     private val messageProcessor: MessageProcessor,
-    private val localIdentifierManager: LocalIdentifierManager
 ) {
     private val log: Logger = Logger.getInstance(MulticastManager::class.java)
 
@@ -268,7 +267,7 @@ class MulticastManager(
      */
     private fun handleReceivedMessage(message: String) {
         try {
-            messageProcessor.handleMessage(message, localIdentifierManager.identifier)
+            messageProcessor.handleMessage(message)
         } catch (e: Exception) {
             log.warn("处理接收到的消息时发生错误: ${e.message}", e)
         }

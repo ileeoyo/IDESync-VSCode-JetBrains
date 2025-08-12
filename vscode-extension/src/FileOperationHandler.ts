@@ -26,6 +26,8 @@ export class FileOperationHandler {
                 return this.handleFileClose(state);
             } else if (state.action === ActionType.WORKSPACE_SYNC) {
                 return this.handleWorkspaceSync(state);
+            } else if (state.action === ActionType.OPEN) {
+                return this.handleFileOpenOrNavigate(state, false);
             } else {
                 return this.handleFileOpenOrNavigate(state);
             }
@@ -57,11 +59,15 @@ export class FileOperationHandler {
 
         try {
             // 获取当前编辑器活跃状态
-            let currentActiveState = await this.isCurrentEditorActive();
+            let currentActiveState = await this.isCurrentWindowActive();
             this.logger.info(`当前编辑器活跃状态: ${currentActiveState}`);
             // 如果当前编辑器活跃，保存当前编辑器状态
             let savedActiveEditorState: EditorState | null = this.editorStateManager.getCurrentActiveEditorState(this.windowStateManager.isWindowActive(true));
-            this.logger.info(`保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}`);
+            if (savedActiveEditorState) {
+                this.logger.info(`保存当前的活跃编辑器状态: ${savedActiveEditorState.filePath}，${savedActiveEditorState.getCursorLog()}，${savedActiveEditorState.getSelectionLog()}`);
+            } else {
+                this.logger.info('当前没有活跃编辑器');
+            }
 
             // 获取当前所有打开的文件
             const currentOpenedFiles = FileUtils.getAllOpenedFiles();
@@ -84,24 +90,19 @@ export class FileOperationHandler {
             // 打开缺失的文件（目标中存在但当前未打开的文件）
             const filesToOpen = targetFiles.filter((file: string) => !currentOpenedFiles.includes(file));
             for (const fileToOpen of filesToOpen) {
-                await FileUtils.openFileByPath(fileToOpen);
+                await FileUtils.openFileByPath(fileToOpen, false);
             }
 
             // 再次获取当前编辑器活跃状态（防止状态延迟变更）
-            currentActiveState = await this.isCurrentEditorActive();
+            currentActiveState = await this.isCurrentWindowActive();
             if (currentActiveState) {
                 if (savedActiveEditorState) {
-                    this.logger.info(`恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}`);
-                    await this.handleFileOpenOrNavigate(savedActiveEditorState);
-
-                    // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
-                    this.editorStateManager.sendCurrentState(true);
-                    this.logger.info('已发送当前活跃编辑器状态给其他编辑器');
+                    await this.restoreLocalState(savedActiveEditorState, false);
                 } else {
-                    this.logger.info('没有保存的活跃编辑器状态，不进行恢复');
+                    this.logger.info('没有活跃编辑器状态，不进行恢复');
                 }
             } else {
-                await this.handleFileOpenOrNavigate(state);
+                await this.followRemoteState(state);
             }
 
             this.logger.info(`✅ 工作区同步完成`);
@@ -111,18 +112,32 @@ export class FileOperationHandler {
     }
 
 
+    async restoreLocalState(state: EditorState, focusEditor: boolean = true): Promise<void> {
+        this.logger.info(`恢复本地状态: ${state.filePath}，focused=${focusEditor}，${state.getCursorLog()}，${state.getSelectionLog()}`);
+        await this.handleFileOpenOrNavigate(state, focusEditor);
+        // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
+        this.editorStateManager.sendCurrentState(true);
+        this.logger.info('已发送当前活跃编辑器状态给其他编辑器');
+    }
+
+    async followRemoteState(state: EditorState): Promise<void> {
+        this.logger.info(`跟随远程状态: ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}`);
+        await this.handleFileOpenOrNavigate(state);
+    }
+
+
     /**
      * 处理文件打开和导航操作
      */
-    async handleFileOpenOrNavigate(state: EditorState): Promise<void> {
+    async handleFileOpenOrNavigate(state: EditorState, focusEditor: boolean = true): Promise<void> {
         if (state.hasSelection()) {
-            this.logger.info(`进行文件选中并导航操作: ${state.filePath}，导航到: ${state.getCursorInfo()} ${state.getSelectionInfoStr()}`);
+            this.logger.info(`进行文件选中并导航操作: ${state.filePath}，导航到: ${state.getCursor()} ${state.getSelectionLog()}`);
         } else {
-            this.logger.info(`进行文件导航操作: ${state.filePath}，导航到: ${state.getCursorInfo()}`);
+            this.logger.info(`进行文件导航操作: ${state.filePath}，导航到: ${state.getCursor()}`);
         }
 
         try {
-            const editor = await FileUtils.openFileByPath(state.getCompatiblePath());
+            const editor = await FileUtils.openFileByPath(state.getCompatiblePath(), focusEditor);
             if (editor) {
                 // 使用统一的选中和光标处理逻辑
                 FileUtils.handleSelectionAndNavigate(
@@ -147,7 +162,7 @@ export class FileOperationHandler {
      * 检查当前编辑器是否处于活跃状态
      * 对于关键的编辑器状态检查，使用重试机制确保准确性
      */
-    private async isCurrentEditorActive(): Promise<boolean> {
+    private async isCurrentWindowActive(): Promise<boolean> {
         let attempts = 0;
         const maxAttempts = 5;
         const delay = 100; // 每次尝试之间的延迟

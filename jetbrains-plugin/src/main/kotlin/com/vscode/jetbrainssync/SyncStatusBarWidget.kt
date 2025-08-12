@@ -22,7 +22,7 @@ class SyncStatusBarWidget(
 
     private var spinnerTimer: Timer? = null
     private var log: Logger = Logger.getInstance(SyncStatusBarWidget::class.java)
-    
+
     // 项目专属的动画索引，避免多实例冲突
     private var spinnerIndex = 0
 

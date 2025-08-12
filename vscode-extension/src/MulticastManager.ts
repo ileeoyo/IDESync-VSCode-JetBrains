@@ -250,7 +250,7 @@ export class MulticastManager {
      */
     private handleReceivedMessage(message: string): void {
         try {
-            this.messageProcessor.handleMessage(message, LocalIdentifierManager.getInstance().identifier);
+            this.messageProcessor.handleMessage(message);
         } catch (error) {
             this.logger.warn('处理接收到的消息时发生错误:', error as Error);
         }
@@ -432,7 +432,4 @@ export class MulticastManager {
         return this.connectionState;
     }
 
-    getLocalIdentifier(): string {
-        return LocalIdentifierManager.getInstance().identifier;
-    }
-} 
+}

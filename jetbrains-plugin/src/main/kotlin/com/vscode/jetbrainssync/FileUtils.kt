@@ -10,6 +10,7 @@ import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
+import com.intellij.openapi.wm.IdeFocusManager
 import java.io.File
 
 /**
@@ -127,6 +128,26 @@ class FileUtils(private val project: Project, private val log: Logger) {
     }
 
     /**
+     * 判断当前编辑器是否获取了焦点
+     * @return Boolean 当前编辑器是否获取了焦点
+     */
+    fun isEditorFocused(): Boolean {
+        val focusManager = IdeFocusManager.getInstance(project)
+        val focusOwner = focusManager.focusOwner
+
+        // 获取当前活跃的编辑器
+        val (currentEditor, _) = getCurrentActiveEditorAndFile()
+
+        // 如果没有活跃的编辑器，则肯定没有焦点
+        if (currentEditor == null) {
+            return false
+        }
+
+        // 检查当前焦点组件是否属于编辑器
+        return focusOwner != null && currentEditor.contentComponent.isAncestorOf(focusOwner)
+    }
+
+    /**
      * 根据文件路径关闭文件
      * 如果直接路径匹配失败，会尝试通过文件名匹配
      */
@@ -156,9 +177,10 @@ class FileUtils(private val project: Project, private val log: Logger) {
     /**
      * 根据文件路径打开文件
      * @param filePath 文件路径
+     * @param focusEditor 是否获取焦点，默认为true
      * @return 返回打开的TextEditor，如果失败返回null
      */
-    fun openFileByPath(filePath: String): TextEditor? {
+    fun openFileByPath(filePath: String, focusEditor: Boolean = true): TextEditor? {
         try {
             log.info("准备打开文件: $filePath")
             val file = File(filePath)
@@ -167,7 +189,7 @@ class FileUtils(private val project: Project, private val log: Logger) {
 
             virtualFile?.let { vFile ->
                 // FileEditorManager.openFile() 会自动复用已打开的文件，无需手动检查
-                val editors = fileEditorManager.openFile(vFile, false)
+                val editors = fileEditorManager.openFile(vFile, focusEditor)
                 val editor = editors.firstOrNull() as? TextEditor
 
                 if (editor != null) {
@@ -208,7 +230,7 @@ class FileUtils(private val project: Project, private val log: Logger) {
         endColumn: Int? = null
     ) {
         try {
-            log.info("准备处理选中和光标导航: 光标位置($line, $column), 选中范围(${startLine ?: "无"},${startColumn ?: "无"}-${endLine ?: "无"},${endColumn ?: "无"})")
+            log.info("准备处理选中和光标导航：${LogFormatter.cursorLog(line, column)}，${LogFormatter.selectionLog(startLine, startColumn, endLine, endColumn)}")
 
             ApplicationManager.getApplication().runWriteAction {
                 val selectionModel = textEditor.editor.selectionModel
@@ -223,17 +245,17 @@ class FileUtils(private val project: Project, private val log: Logger) {
                         textEditor.editor.logicalPositionToOffset(startPosition),
                         textEditor.editor.logicalPositionToOffset(endPosition)
                     )
-                    log.info("✅ 成功设置选中范围: (${startLine},${startColumn})-(${endLine},${endColumn})")
+                    log.info("✅ 成功设置选中范围: ${LogFormatter.selection(startLine, startColumn, endLine, endColumn)}")
                 } else {
                     // 无选中范围，清除选中
                     selectionModel.removeSelection()
-                    log.info("✅ 成功清除选中状态")
+                    log.info("✅ 成功清除选中状态，${LogFormatter.cursorLog(line, column)}")
                 }
 
                 // 然后移动光标到指定位置
                 val cursorPosition = LogicalPosition(line, column)
                 textEditor.editor.caretModel.moveToLogicalPosition(cursorPosition)
-                log.info("✅ 成功移动光标到位置: 行$line, 列$column")
+                log.info("✅ 成功移动光标到位置: ${LogFormatter.cursor(line, column)}")
 
                 // 确保光标位置在可视区域内
                 val visibleArea = textEditor.editor.scrollingModel.visibleArea
@@ -241,14 +263,14 @@ class FileUtils(private val project: Project, private val log: Logger) {
 
                 if (!visibleArea.contains(targetPoint)) {
                     textEditor.editor.scrollingModel.scrollToCaret(ScrollType.MAKE_VISIBLE)
-                    log.info("✅ 光标位置不可见，已执行滚动到: 行$line, 列$column")
+                    log.info("✅ 光标位置不可见，已执行滚动到: ${LogFormatter.cursor(line, column)}")
                 } else {
                     log.info("光标位置已在可视区域内，无需滚动")
                 }
             }
             log.info("✅ 选中和光标导航处理完成")
         } catch (e: Exception) {
-            log.warn("❌ 处理选中和光标导航失败: 光标位置($line, $column) - ${e.message}", e)
+            log.warn("❌ 处理选中和光标导航失败: ${LogFormatter.cursorLog(line, column)} - ${e.message}", e)
         }
     }
 }

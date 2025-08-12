@@ -23,7 +23,8 @@ class FileOperationHandler(
                 when (state.action) {
                     ActionType.CLOSE -> handleFileClose(state)
                     ActionType.WORKSPACE_SYNC -> handleWorkspaceSync(state)
-                    else -> handleFileOpenOrNavigate(state)
+                    ActionType.OPEN -> handleFileOpenOrNavigate(state, false)
+                    else -> handleFileOpenOrNavigate(state, false)
                 }
             } catch (e: Exception) {
                 log.warn("处理消息操作失败: ${e.message}", e)
@@ -53,11 +54,15 @@ class FileOperationHandler(
 
         try {
             // 获取当前编辑器活跃状态
-            var currentActiveState = isCurrentEditorActive();
+            var currentActiveState = isCurrentWindowActive();
             log.info("当前编辑器活跃状态: $currentActiveState");
             // 如果当前编辑器活跃，保存当前编辑器状态
             val savedActiveEditorState: EditorState? = editorStateManager.getCurrentActiveEditorState(windowStateManager.isWindowActive(forceRealTime = true))
-            log.info("保存当前的活跃编辑器状态: ${savedActiveEditorState?.filePath}");
+            if (savedActiveEditorState != null) {
+                log.info("保存当前的活跃编辑器状态: ${savedActiveEditorState.filePath}，${savedActiveEditorState.getCursorLog()}，${savedActiveEditorState.getSelectionLog()}")
+            } else {
+                log.info("当前没有活跃编辑器")
+            }
 
             // 获取当前所有打开的文件
             val currentOpenedFiles = fileUtils.getAllOpenedFiles()
@@ -80,24 +85,19 @@ class FileOperationHandler(
             // 打开缺失的文件（目标中存在但当前未打开的文件）
             val filesToOpen = targetFiles.filter { file -> !currentOpenedFiles.contains(file) }
             for (fileToOpen in filesToOpen) {
-                fileUtils.openFileByPath(fileToOpen)
+                fileUtils.openFileByPath(fileToOpen, false)
             }
 
             // 再次获取当前编辑器活跃状态（防止状态延迟变更）
-            currentActiveState = isCurrentEditorActive();
+            currentActiveState = isCurrentWindowActive();
             if (currentActiveState) {
                 if (savedActiveEditorState != null) {
-                    log.info("恢复之前保存的活跃编辑器状态: ${savedActiveEditorState.filePath}")
-                    handleFileOpenOrNavigate(savedActiveEditorState)
-
-                    // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
-                    editorStateManager.sendCurrentState(true)
-                    log.info("已发送当前活跃编辑器状态给其他编辑器")
+                    restoreLocalState(savedActiveEditorState, false)
                 } else {
-                    log.info("没有保存的活跃编辑器状态，不进行恢复")
+                    log.info("没有活跃编辑器状态，不进行恢复")
                 }
             } else {
-                handleFileOpenOrNavigate(state)
+                followRemoteState(state)
             }
 
             log.info("✅ 工作区同步完成")
@@ -107,16 +107,35 @@ class FileOperationHandler(
     }
 
     /**
+     * 恢复本地编辑器状态
+     */
+    private fun restoreLocalState(state: EditorState, focusEditor: Boolean = true) {
+        log.info("恢复本地状态: ${state.filePath}，focused=${focusEditor}，${state.getCursorLog()}，${state.getSelectionLog()}")
+        handleFileOpenOrNavigate(state, focusEditor)
+        // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
+        editorStateManager.sendCurrentState(true)
+        log.info("已发送当前活跃编辑器状态给其他编辑器")
+    }
+
+    /**
+     * 跟随远程编辑器状态
+     */
+    private fun followRemoteState(state: EditorState) {
+        log.info("跟随远程状态: ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
+        handleFileOpenOrNavigate(state, false)
+    }
+
+    /**
      * 处理文件打开和导航操作
      */
-    private fun handleFileOpenOrNavigate(state: EditorState) {
+    private fun handleFileOpenOrNavigate(state: EditorState, focusEditor: Boolean = true) {
         if (state.hasSelection()) {
-            log.info("进行文件选中并导航操作: ${state.filePath}，导航到: ${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
+            log.info("进行文件选中并导航操作: ${state.filePath}，导航到: ${state.getCursor()}，${state.getSelectionLog()}")
         } else {
-            log.info("进行文件导航操作: ${state.filePath}，导航到: ${state.getCursorInfo()}")
+            log.info("进行文件导航操作: ${state.filePath}，导航到: ${state.getCursorLog()}")
         }
 
-        val editor = fileUtils.openFileByPath(state.getCompatiblePath())
+        val editor = fileUtils.openFileByPath(state.getCompatiblePath(), focusEditor)
         editor?.let { textEditor ->
             // 使用统一的选中和光标处理逻辑
             fileUtils.handleSelectionAndNavigate(
@@ -137,7 +156,7 @@ class FileOperationHandler(
     /**
      * 检查当前编辑器是否处于活跃状态
      */
-    private fun isCurrentEditorActive(): Boolean {
+    private fun isCurrentWindowActive(): Boolean {
         // 对于关键的编辑器状态检查，使用强制实时查询确保准确性
         return windowStateManager.isWindowActive(forceRealTime = true)
     }

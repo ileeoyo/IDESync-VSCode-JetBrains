@@ -48,7 +48,7 @@ class OperationQueueProcessor(
         }
 
         operationQueue.offer(state)
-        log.info("操作已推入队列：${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
+        log.info("操作已推入队列：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
     }
 
     /**
@@ -102,9 +102,9 @@ class OperationQueueProcessor(
         )
         val success = multicastManager.sendMessage(messageWrapper)
         if (success) {
-            log.info("✅ 发送组播消息：${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
+            log.info("✅ 发送组播消息：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
         } else {
-            log.info("❌ 发送组播消息失败：${state.action} ${state.filePath}，${state.getCursorInfo()}，${state.getSelectionInfoStr()}")
+            log.info("❌ 发送组播消息失败：${state.action} ${state.filePath}，${state.getCursorLog()}，${state.getSelectionLog()}")
         }
     }
 
