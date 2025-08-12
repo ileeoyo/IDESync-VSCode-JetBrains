@@ -154,10 +154,9 @@ class FileUtils(private val project: Project, private val log: Logger) {
     fun closeFileByPath(filePath: String) {
         try {
             log.info("准备关闭文件: $filePath")
-            val file = File(filePath)
-            val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(file)
             val fileEditorManager = FileEditorManager.getInstance(project)
-
+            // 尝试通过文件路径匹配
+            val virtualFile = findFileByPath(filePath)
             virtualFile?.let { vFile ->
                 if (fileEditorManager.isFileOpen(vFile)) {
                     fileEditorManager.closeFile(vFile)
@@ -176,6 +175,7 @@ class FileUtils(private val project: Project, private val log: Logger) {
 
     /**
      * 根据文件路径打开文件
+     * 支持打开其他IDE中刚刚创建的新文件，通过刷新VFS缓存解决文件找不到的问题
      * @param filePath 文件路径
      * @param focusEditor 是否获取焦点，默认为true
      * @return 返回打开的TextEditor，如果失败返回null
@@ -183,10 +183,9 @@ class FileUtils(private val project: Project, private val log: Logger) {
     fun openFileByPath(filePath: String, focusEditor: Boolean = true): TextEditor? {
         try {
             log.info("准备打开文件: $filePath")
-            val file = File(filePath)
-            val virtualFile = LocalFileSystem.getInstance().findFileByIoFile(file)
             val fileEditorManager = FileEditorManager.getInstance(project)
-
+            // 尝试通过文件路径查找虚拟文件
+            val virtualFile = findFileByPath(filePath)
             virtualFile?.let { vFile ->
                 // FileEditorManager.openFile() 会自动复用已打开的文件，无需手动检查
                 val editors = fileEditorManager.openFile(vFile, focusEditor)
@@ -206,6 +205,59 @@ class FileUtils(private val project: Project, private val log: Logger) {
             log.warn("打开文件失败: $filePath - ${e.message}", e)
             return null
         }
+    }
+
+    /**
+     * 查找虚拟文件，如果找不到则刷新VFS缓存后重试
+     * 这个方法专门处理其他IDE中新创建文件的同步问题
+     * @param filePath 文件路径
+     * @return 虚拟文件对象，如果找不到返回null
+     */
+    fun findFileByPath(filePath: String): VirtualFile? {
+        val file = File(filePath)
+        val fileSystem = LocalFileSystem.getInstance()
+        // 第一次尝试：直接查找
+        var virtualFile = fileSystem.findFileByIoFile(file)
+        if (virtualFile != null) {
+            log.info("直接找到文件: ${file.path}")
+            return virtualFile
+        }
+
+        log.info("文件未找到，开始刷新VFS缓存: ${file.path}")
+
+        // 第二次尝试：刷新父目录后查找
+        val parentFile = file.parentFile
+        if (parentFile != null && parentFile.exists()) {
+            val parentVirtualFile = fileSystem.findFileByIoFile(parentFile)
+            parentVirtualFile?.refresh(false, true)
+            log.info("已刷新父目录VFS缓存: ${parentFile.path}")
+
+            virtualFile = fileSystem.findFileByIoFile(file)
+            if (virtualFile != null) {
+                log.info("刷新父目录后找到文件: ${file.path}")
+                return virtualFile
+            }
+        }
+
+        // 第三次尝试：强制刷新整个文件系统后查找
+        log.info("刷新父目录无效，执行全局VFS刷新")
+        fileSystem.refresh(false)
+
+        // 给文件系统一些时间来更新索引
+        try {
+            Thread.sleep(100)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+        }
+
+        virtualFile = fileSystem.findFileByIoFile(file)
+        if (virtualFile != null) {
+            log.info("全局刷新后找到文件: ${file.path}")
+            return virtualFile
+        }
+
+        log.warn("所有刷新尝试均失败，文件可能不存在: ${file.path}")
+        return null
     }
 
 

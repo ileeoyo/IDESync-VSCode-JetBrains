@@ -60,6 +60,13 @@
     ]]></description>
     <depends>com.intellij.modules.platform</depends>
     <change-notes><![CDATA[
+        <h3>Version 1.4.2</h3>
+        <p><strong>Fixed</strong></p>
+        <ul>
+            <li>逻辑优化：修复IDEA文件打开获取编辑器实例逻辑，提升文件打开的稳定性</li>
+            <li>逻辑优化：解决IDEA多文件拖拽快速打开同步问题</li>
+            <li>逻辑优化：修复VSCode中新文件打开时同步问题（如AI生成新文件场景）</li>
+        </ul>
         <h3>Version 1.4.1</h3>
         <p><strong>Changed</strong></p>
         <ul>

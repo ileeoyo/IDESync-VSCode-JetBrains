@@ -45,7 +45,12 @@ class EventListenerManager(
                         return
                     }
                     log.info("事件-文件打开: ${file.path}")
-                    val editor = source.selectedTextEditor
+                    val fileEditor = source.getSelectedEditor(file)
+                    val editor = if (fileEditor is com.intellij.openapi.fileEditor.TextEditor) {
+                        fileEditor.editor
+                    } else {
+                        null
+                    }
                     editor?.let {
                         val state = editorStateManager.createEditorState(
                             it, file, ActionType.OPEN, windowStateManager.isWindowActive()
@@ -85,7 +90,12 @@ class EventListenerManager(
                             return
                         }
                         log.info("事件-文件改变: ${event.newFile!!.path}")
-                        val (editor, _) = fileUtils.getCurrentActiveEditorAndFile()
+                        val fileEditor = event.newEditor
+                        val editor = if (fileEditor is com.intellij.openapi.fileEditor.TextEditor) {
+                            fileEditor.editor
+                        } else {
+                            null
+                        }
                         editor?.let {
                             val state = editorStateManager.createEditorState(
                                 it, event.newFile!!, ActionType.OPEN, windowStateManager.isWindowActive()
