@@ -96,8 +96,8 @@ export class FileOperationHandler {
             // 再次获取当前编辑器活跃状态（防止状态延迟变更）
             currentActiveState = await this.isCurrentWindowActive();
             if (currentActiveState) {
-                if (savedActiveEditorState) {
-                    await this.restoreLocalState(savedActiveEditorState, false);
+                if (savedActiveEditorState && filesToOpen.length > 0) {
+                    await this.restoreLocalState(savedActiveEditorState, true);
                 } else {
                     this.logger.info('没有活跃编辑器状态，不进行恢复');
                 }
@@ -115,9 +115,6 @@ export class FileOperationHandler {
     async restoreLocalState(state: EditorState, focusEditor: boolean = true): Promise<void> {
         this.logger.info(`恢复本地状态: ${state.filePath}，focused=${focusEditor}，${state.getCursorLog()}，${state.getSelectionLog()}`);
         await this.handleFileOpenOrNavigate(state, focusEditor);
-        // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
-        this.editorStateManager.sendCurrentState(true);
-        this.logger.info('已发送当前活跃编辑器状态给其他编辑器');
     }
 
     async followRemoteState(state: EditorState): Promise<void> {

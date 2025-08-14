@@ -68,6 +68,25 @@ export class EditorStateManager {
         );
     }
 
+    /**
+     * 从文件Path创建建编辑器状态
+     */
+    createEditorStateFromPath(
+        path: string,
+        action: ActionType,
+        isActive: boolean
+    ): EditorState {
+        return new EditorState(
+            action,
+            path,
+            0,
+            0,
+            SourceType.VSCODE,
+            isActive,
+            formatTimestamp()
+        );
+    }
+
 
     /**
      * 创建工作区同步状态

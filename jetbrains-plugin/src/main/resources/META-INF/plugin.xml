@@ -60,6 +60,15 @@
     ]]></description>
     <depends>com.intellij.modules.platform</depends>
     <change-notes><![CDATA[
+        <h3>Version 1.5.1</h3>
+        <p><strong>Changed</strong></p>
+        <ul>
+            <li>优化工作空间同步时文件恢复逻辑</li>
+        </ul>
+        <p><strong>Added</strong></p>
+        <ul>
+            <li>支持VSCode拖拽后台打开文件场景的同步，并区分文件前台/后台打开以提升同步准确性</li>
+        </ul>
         <h3>Version 1.4.2</h3>
         <p><strong>Fixed</strong></p>
         <ul>

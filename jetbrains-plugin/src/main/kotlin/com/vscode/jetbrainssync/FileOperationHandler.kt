@@ -91,7 +91,7 @@ class FileOperationHandler(
             // 再次获取当前编辑器活跃状态（防止状态延迟变更）
             currentActiveState = isCurrentWindowActive();
             if (currentActiveState) {
-                if (savedActiveEditorState != null) {
+                if (savedActiveEditorState != null && !filesToOpen.isEmpty()) {
                     restoreLocalState(savedActiveEditorState, false)
                 } else {
                     log.info("没有活跃编辑器状态，不进行恢复")
@@ -112,9 +112,6 @@ class FileOperationHandler(
     private fun restoreLocalState(state: EditorState, focusEditor: Boolean = true) {
         log.info("恢复本地状态: ${state.filePath}，focused=${focusEditor}，${state.getCursorLog()}，${state.getSelectionLog()}")
         handleFileOpenOrNavigate(state, focusEditor)
-        // 恢复活跃编辑器状态后，发送当前光标位置给其他编辑器
-        editorStateManager.sendCurrentState(true)
-        log.info("已发送当前活跃编辑器状态给其他编辑器")
     }
 
     /**
